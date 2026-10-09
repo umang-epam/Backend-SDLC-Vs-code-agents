@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f2f5f4">
+  <title>Pipeline Monitor</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Pipeline Monitor home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span><span class="brand-name">Fieldnote</span><span class="brand-subtitle">LOCAL PIPELINE MONITOR</span></span>
+      </a>
+      <div class="run-picker">
+        <label for="run-select">RUN</label>
+        <select id="run-select" disabled aria-label="Select pipeline run">
+          <option value="">No runs discovered</option>
+        </select>
+      </div>
+      <div class="top-actions">
+        <span id="connection" class="connection"><i class="connection-dot"></i><span>Connecting</span></span>
+        <button id="refresh" class="refresh-button" type="button" title="Refresh status files">Refresh</button>
+      </div>
+    </header>
+
+    <section class="sync-line" aria-live="polite">
+      <span id="sync-copy">Looking for artifact runs</span>
+      <span class="sync-divider"></span>
+      <span>Poll interval <strong>3 sec</strong></span>
+      <span class="sync-divider"></span>
+      <span>Status file writes only; agent processes are not monitored.</span>
+    </section>
+
+    <output id="notice" class="notice" hidden></output>
+
+    <section id="empty-state" class="empty-state" hidden>
+      <div class="empty-index">NO RUN ARTIFACTS</div>
+      <h1>Nothing is in the field yet.</h1>
+      <p>Create a run directory under <code>artifacts/&lt;run-id&gt;/</code> and add its <code>live-status.md</code> checklist. This view will pick it up automatically.</p>
+      <div class="empty-foot"><span class="empty-dot"></span><span id="empty-root">Waiting for the artifact root</span></div>
+    </section>
+
+    <div id="dashboard" hidden>
+      <section class="summary" aria-label="Run summary">
+        <div class="summary-primary">
+          <div class="eyebrow">SELECTED RUN <span id="run-id" class="mono">--</span></div>
+          <div class="run-state"><span id="overall-status" class="status-chip status-unknown">UNKNOWN</span><span class="current-copy">Current stage</span><strong id="current-stage">--</strong></div>
+        </div>
+        <div class="summary-stat"><span class="eyebrow">ACCEPTED</span><strong id="completed-count">0 <small>/ 6</small></strong></div>
+        <div class="summary-stat"><span class="eyebrow">BLOCKED / FAILED</span><strong id="attention-count" class="attention-value">0</strong></div>
+        <div class="summary-stat summary-updated"><span class="eyebrow">LAST ARTIFACT UPDATE</span><strong id="last-updated" class="mono">--</strong><span id="stale-label" class="stale-label"></span></div>
+      </section>
+
+      <section class="pipeline-section" aria-labelledby="pipeline-heading">
+        <div class="section-heading"><div><span class="eyebrow">SEQUENCE 01-06</span><h2 id="pipeline-heading">Run path</h2></div><span id="manifest-ref" class="manifest-ref"></span></div>
+        <ol id="pipeline" class="pipeline"></ol>
+      </section>
+
+      <section class="work-area">
+        <div class="stage-list-section">
+          <div class="section-heading list-heading"><div><span class="eyebrow">PERSISTED STAGE RECORDS</span><h2>Stage ledger</h2></div><span id="file-updated" class="file-updated mono">FILE MTIME --</span></div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Stage / agent</th><th>Status</th><th>Rev</th><th>Gate</th><th>Updated</th></tr></thead>
+              <tbody id="stage-rows"></tbody>
+            </table>
+          </div>
+        </div>
+        <aside class="detail-panel" aria-labelledby="detail-title">
+          <div class="detail-top"><span class="eyebrow">STAGE DETAIL</span><span id="detail-number" class="detail-number">--</span></div>
+          <h2 id="detail-title">Select a stage</h2>
+          <div class="detail-status-line"><span id="detail-status" class="status-chip status-unknown">UNKNOWN</span><span id="detail-revision" class="mono">REV --</span></div>
+          <dl class="detail-fields">
+            <div><dt>Gate</dt><dd id="detail-gate">--</dd></div>
+            <div><dt>Started</dt><dd id="detail-started" class="mono">--</dd></div>
+            <div><dt>Updated</dt><dd id="detail-updated" class="mono">--</dd></div>
+            <div><dt>Activity</dt><dd id="detail-activity">--</dd></div>
+            <div><dt>Result / blocker references</dt><dd id="detail-references" class="reference-list">--</dd></div>
+          </dl>
+          <p class="detail-foot">The manifest remains the machine-readable authority. This panel reflects the read-only checklist.</p>
+        </aside>
+      </section>
+
+      <footer class="page-foot"><span id="artifact-root"></span><span>READ-ONLY VIEW <i></i> LOCALHOST ONLY</span></footer>
+    </div>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
