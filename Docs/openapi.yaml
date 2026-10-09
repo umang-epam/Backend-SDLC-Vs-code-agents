@@ -1,0 +1,610 @@
+openapi: 3.1.0
+info:
+  title: Insurance Frontend Mock Data Schemas
+  version: 0.1.0
+  description: >-
+    Provisional schema-only inventory of all selected mock fixtures. Structures
+    merge every observed record, including nested arrays and dictionaries.
+    These schemas describe fixture shapes, not verified backend contracts.
+    Required fields are included only where nearby declared types or Zod schemas
+    support them and the fixtures agree. Declared numeric fields remain numbers
+    unless an integer constraint is evidenced. Other integral sample values are
+    integers. No exhaustive sample-derived enums, bounds, defaults, closed
+    objects, server URLs, security requirements, or personal examples are added.
+    Unobserved optional contract fields and custom runtime refinements are not
+    expanded; this is not a complete translation of frontend validation rules.
+paths: {}
+x-scope:
+  mode: schemas-only
+  source-file-count: 17
+  endpoint-policy: >-
+    No proposed operations. src/api/bindApi.ts evidences GET /api/quotes,
+    GET /api/quotes/{quoteId}, and GET /api/policies, but its list return types
+    are bare arrays whereas the selected fixtures are envelopes. These calls
+    do not establish fixture response status codes or a matching wire contract.
+    Preference API calls are unrelated to the selected fixtures. The route in
+    coverage.service.ts is a future-implementation comment, not an active call.
+  inference-policy: >-
+    All JSON files are parsed with BOM handling. The TypeScript initializer is
+    inspected statically, never executed. Missing fields are not treated as
+    null. No explicit nulls or heterogeneous primitive types were observed.
+    Empty dictionary arrays use item evidence from other entries in the same
+    declared dictionary. Examples are omitted to protect credentials and
+    personal data. Dictionary keys are not enumerated as user identifiers.
+  limitations:
+    - User-policy records omit customerId, productId, and namedInsureds required by PolicySchema; a separate sample-derived schema preserves the conflict.
+    - The FNOL fixture lacks claimReference required by FNOLSubmitResponse; claimService.submitFNOL generates it at runtime, outside the fixture schema.
+    - One policy contains a singular vehicle field not declared by PolicySchema; it is preserved as an optional observed property.
+    - Referral fixture fields have no associated declared response contract in the inspected API, services, or types; their requiredness is unresolved.
+    - Recommendation prefillData is an open record of arbitrary values by contract; observed fields are hints, not exhaustive keys or guaranteed value types.
+    - User credentials belong to local mock authentication data, not to the public UserSchema or a proven HTTP response.
+    - Date-like and email-like fields remain strings unless explicitly supported by a relevant validator; no date formats are inferred from names alone.
+x-source-files:
+  - src/mockdata/bindWizardData.ts
+  - src/mockdata/claim.mock.json
+  - src/mockdata/coverageOptions.mock.json
+  - src/mockdata/customer.mock.json
+  - src/mockdata/fnol.mock.json
+  - src/mockdata/notification.mock.json
+  - src/mockdata/payment.mock.json
+  - src/mockdata/policy.mock.json
+  - src/mockdata/policyCoverages.mock.json
+  - src/mockdata/products.mock.json
+  - src/mockdata/quote.mock.json
+  - src/mockdata/recommendation.mock.json
+  - src/mockdata/referred.mock.json
+  - src/mockdata/telematics.mock.json
+  - src/mockdata/user-policies.mock.json
+  - src/mockdata/users.mock.json
+  - src/mockdata/vehicle.mock.json
+components:
+  schemas:
+    BindWizardData:
+      type: object
+      description: Static mockWizardData initializer; requiredness and types from WizardData.
+      x-source: src/mockdata/bindWizardData.ts#mockWizardData
+      required: [coverages, limits, totalPremium, acknowledgedDisclosures]
+      properties:
+        coverages: {type: array, items: {type: string}}
+        limits: {type: string}
+        totalPremium: {type: string}
+        acknowledgedDisclosures: {type: boolean}
+    ClaimsFixture:
+      type: object
+      x-source: src/mockdata/claim.mock.json
+      x-contract-evidence: src/types/claim.types.ts#ClaimsResponseSchema
+      required: [claims]
+      properties:
+        claims:
+          type: array
+          items: {$ref: '#/components/schemas/Claim'}
+    Claim:
+      type: object
+      description: All six records merged; optional claim-state fields retain their observed presence differences.
+      x-contract-evidence: src/types/claim.types.ts#ClaimSchema
+      required: [id, claimNumber, policyId, policyNumber, type, status, incidentDate, submittedDate, description]
+      properties:
+        id: {type: string}
+        claimNumber: {type: string}
+        policyId: {type: string}
+        policyNumber: {type: string}
+        type: {type: string}
+        status: {type: string}
+        incidentDate: {type: string}
+        submittedDate: {type: string}
+        description: {type: string}
+        estimatedResolutionTime: {type: string}
+        reasonSummary: {type: string}
+        contactSupportEmail: {type: string, format: email}
+        paidDate: {type: string}
+    CoverageOptionsFixture:
+      type: object
+      x-source: src/mockdata/coverageOptions.mock.json
+      x-contract-evidence: src/services/coverage.service.ts#CoverageOptionsResponseSchema
+      required: [coverageOptions]
+      properties:
+        coverageOptions:
+          type: array
+          items: {$ref: '#/components/schemas/CoverageOptions'}
+    CoverageOptions:
+      type: object
+      x-contract-evidence: src/services/coverage.service.ts#CoverageOptionsSchema
+      required: [product, basePremium, baseCoverageLimit, baseDeductible, coverageLimits, deductibles, addOns]
+      properties:
+        product: {type: string}
+        basePremium: {type: number}
+        baseCoverageLimit: {type: number}
+        baseDeductible: {type: number}
+        coverageLimits: {type: array, items: {type: number}}
+        deductibles: {type: array, items: {type: number}}
+        addOns:
+          type: array
+          items: {$ref: '#/components/schemas/CoverageAddOn'}
+    CoverageAddOn:
+      type: object
+      x-contract-evidence: src/services/coverage.service.ts#AddOnSchema
+      required: [id, name, description, monthlyCost]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        description: {type: string}
+        monthlyCost: {type: number}
+    CustomersFixture:
+      type: object
+      description: Preserves both profile and customers; the profile validator does not declare the customers collection.
+      x-source: src/mockdata/customer.mock.json
+      x-contract-evidence: src/types/customer.types.ts#CustomerProfileResponseSchema
+      required: [profile]
+      properties:
+        profile: {$ref: '#/components/schemas/CustomerProfile'}
+        customers:
+          type: array
+          items: {$ref: '#/components/schemas/CustomerProfile'}
+    CustomerProfile:
+      type: object
+      x-contract-evidence: src/types/customer.types.ts#CustomerProfileSchema
+      required: [id, name, email, phone, address, dob, ssnMasked]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        email: {type: string}
+        phone: {type: string}
+        address: {$ref: '#/components/schemas/CustomerAddress'}
+        dob: {type: string}
+        ssnMasked: {type: string}
+    CustomerAddress:
+      type: object
+      x-contract-evidence: src/types/customer.types.ts#CustomerProfileSchema.address
+      required: [street, city, state, zipCode]
+      properties:
+        street: {type: string}
+        city: {type: string}
+        state: {type: string}
+        zipCode: {type: string}
+    FnolFixture:
+      type: object
+      description: >-
+        Partial FNOL response fixture. FNOLSubmitResponse requires claimReference,
+        but the JSON does not contain it. claimService.submitFNOL generates that
+        field at runtime; it is intentionally not invented in this fixture schema.
+      x-source: src/mockdata/fnol.mock.json
+      x-contract-evidence: src/types/fnol.types.ts#FNOLSubmitResponse
+      required: [status, nextSteps]
+      properties:
+        status: {type: string}
+        nextSteps: {type: array, items: {type: string}}
+    NotificationsFixture:
+      type: object
+      x-source: src/mockdata/notification.mock.json
+      x-contract-evidence: src/types/notification.types.ts#NotificationsResponseSchema
+      required: [notifications]
+      properties:
+        notifications:
+          type: array
+          items: {$ref: '#/components/schemas/Notification'}
+    Notification:
+      type: object
+      x-contract-evidence: src/types/notification.types.ts#NotificationItemSchema
+      required: [id, title, message, timestamp, read, type]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        message: {type: string}
+        timestamp: {type: string}
+        read: {type: boolean}
+        type: {type: string}
+    PaymentsFixture:
+      type: object
+      description: Preserves the observed isPaid flag, which PaymentsResponseSchema does not declare.
+      x-source: src/mockdata/payment.mock.json
+      x-contract-evidence: src/types/payment.types.ts#PaymentsResponseSchema
+      required: [payments, upcomingDues]
+      properties:
+        isPaid: {type: boolean}
+        payments:
+          type: array
+          items: {$ref: '#/components/schemas/Payment'}
+        upcomingDues:
+          type: array
+          items: {$ref: '#/components/schemas/Payment'}
+    Payment:
+      type: object
+      description: Merges both payment collections under their shared declared PaymentSchema.
+      x-contract-evidence: src/types/payment.types.ts#PaymentSchema
+      required: [id, transactionId, policyId, amount, paymentDate, dueDate, status, paymentMethod]
+      properties:
+        id: {type: string}
+        transactionId: {type: string}
+        policyId: {type: string}
+        policyNumber: {type: string}
+        policyType: {type: string}
+        amount: {type: number}
+        paymentDate: {type: string}
+        dueDate: {type: string}
+        status: {type: string}
+        paymentMethod: {type: string}
+        gracePeriod: {type: boolean}
+    PoliciesFixture:
+      type: object
+      x-source: src/mockdata/policy.mock.json
+      x-contract-evidence: src/types/policy.types.ts#PoliciesResponseSchema
+      required: [policies]
+      properties:
+        policies:
+          type: array
+          items: {$ref: '#/components/schemas/Policy'}
+    Policy:
+      type: object
+      description: >-
+        Merges all nine policies. The singular vehicle property is observed in
+        one record but absent from PolicySchema; it is preserved, not normalized
+        into vehicles. The endDate-after-startDate runtime refinement is not
+        expressible here as a standard field-level JSON Schema constraint.
+      x-contract-evidence: src/types/policy.types.ts#PolicySchema
+      required: [id, policyNumber, customerId, productId, type, provider, premiumAmount, coverageAmount, startDate, endDate, status, namedInsureds]
+      properties:
+        id: {type: string}
+        policyNumber: {type: string}
+        customerId: {type: string}
+        productId: {type: string}
+        type: {type: string}
+        provider: {type: string}
+        status: {type: string}
+        premiumAmount: {type: number}
+        coverageAmount: {type: number}
+        startDate: {type: string}
+        endDate: {type: string}
+        nextPaymentDueDate: {type: string}
+        gracePeriodEndDate: {type: string}
+        pastDueAmount: {type: number}
+        isPastDue: {type: boolean}
+        paymentStatus: {type: string}
+        namedInsureds:
+          type: array
+          items: {$ref: '#/components/schemas/NamedInsured'}
+        vehicles:
+          type: array
+          items: {$ref: '#/components/schemas/PolicyVehicle'}
+        address: {$ref: '#/components/schemas/PolicyAddress'}
+        vehicle: {$ref: '#/components/schemas/PolicyVehicle'}
+    NamedInsured:
+      type: object
+      x-contract-evidence: src/types/namedInsurends.types.ts#NamedInsuredSchema
+      required: [name, relationship]
+      properties:
+        name: {type: string}
+        relationship: {type: string}
+    PolicyVehicle:
+      type: object
+      x-contract-evidence: src/types/policy.types.ts#PolicyVehicleSchema
+      required: [vin, make, model, year]
+      properties:
+        vin: {type: string}
+        make: {type: string}
+        model: {type: string}
+        year: {type: integer}
+    PolicyAddress:
+      type: object
+      x-contract-evidence: src/types/policy.types.ts#PolicyAddressSchema
+      required: [street, city, state, zipCode]
+      properties:
+        street: {type: string}
+        city: {type: string}
+        state: {type: string}
+        zipCode: {type: string}
+    PolicyCoveragesFixture:
+      type: object
+      x-source: src/mockdata/policyCoverages.mock.json
+      x-contract-evidence: src/services/policy.service.ts#PolicyCoveragesResponse
+      required: [policyCoverages]
+      properties:
+        policyCoverages:
+          type: array
+          items: {$ref: '#/components/schemas/PolicyCoverage'}
+    PolicyCoverage:
+      type: object
+      x-contract-evidence: src/types/policy.types.ts#PolicyCoverageSchema
+      required: [id, policyId, category, coverageType, description, limitAmount, deductibleAmount, status]
+      properties:
+        id: {type: string}
+        policyId: {type: string}
+        category: {type: string}
+        coverageType: {type: string}
+        description: {type: string}
+        limitAmount: {type: number}
+        deductibleAmount: {type: number}
+        status: {type: string}
+    ProductsFixture:
+      type: object
+      x-source: src/mockdata/products.mock.json
+      x-contract-evidence: src/services/policy.service.ts#ProductsResponse
+      required: [products]
+      properties:
+        products:
+          type: array
+          items: {$ref: '#/components/schemas/Product'}
+    Product:
+      type: object
+      x-contract-evidence: src/services/policy.service.ts#Product
+      required: [id, code, name, type, provider]
+      properties:
+        id: {type: string}
+        code: {type: string}
+        name: {type: string}
+        type: {type: string}
+        provider: {type: string}
+    QuotesFixture:
+      type: object
+      x-source: src/mockdata/quote.mock.json
+      x-contract-evidence: src/types/quote.types.ts#QuotesResponseSchema
+      required: [quotes]
+      properties:
+        quotes:
+          type: array
+          items: {$ref: '#/components/schemas/Quote'}
+    Quote:
+      type: object
+      x-contract-evidence: src/types/quote.types.ts#QuoteSchema
+      required: [id, type, coverageAmount, monthlyPremium, annualPremium, deductible, features]
+      properties:
+        id: {type: string}
+        type: {type: string}
+        coverageAmount: {type: number}
+        monthlyPremium: {type: number}
+        annualPremium: {type: number}
+        deductible: {type: number}
+        features: {type: array, items: {type: string}}
+    RecommendationsFixture:
+      type: object
+      x-source: src/mockdata/recommendation.mock.json
+      x-contract-evidence: src/types/recommendation.types.ts#AllRecommendationsResponseSchema
+      required: [allRecommendations]
+      properties:
+        allRecommendations:
+          type: array
+          items: {$ref: '#/components/schemas/Recommendation'}
+        userRecommendationProfiles:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/UserRecommendationProfile'}
+    Recommendation:
+      type: object
+      x-contract-evidence: src/types/recommendation.types.ts#RecommendationSchema
+      required: [id, title, type, tag, tagColor, subtitle, features, iconType, targetProduct, prefillData]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        type: {type: string}
+        tag: {type: string}
+        tagColor: {type: string}
+        subtitle: {type: string}
+        features: {type: array, items: {type: string}}
+        iconType: {type: string}
+        discountText: {type: string}
+        targetProduct: {type: string}
+        estimatedMonthlyPrice: {type: number}
+        eligibility: {$ref: '#/components/schemas/RecommendationEligibility'}
+        prefillData: {$ref: '#/components/schemas/RecommendationPrefillData'}
+    RecommendationEligibility:
+      type: object
+      x-contract-evidence: src/types/recommendation.types.ts#RecommendationEligibilitySchema
+      properties:
+        missingPolicyType: {type: string}
+    RecommendationPrefillData:
+      type: object
+      description: >-
+        Contract is Record<string, any>. All observed keys are listed, but their
+        schemas remain unconstrained because the declared record permits any
+        value. Observed primitive types are informational extensions only.
+      x-contract-evidence: src/types/recommendation.types.ts#RecommendationSchema.prefillData
+      additionalProperties: {}
+      properties:
+        propertyType: {x-observed-type: string}
+        yearBuilt: {x-observed-type: integer}
+        personalPropertyCoverage: {x-observed-type: integer}
+        liabilityCoverage: {x-observed-type: integer}
+        deductible: {x-observed-type: integer}
+        estimatedMonthlyPrice: {x-observed-type: integer}
+        productType: {x-observed-type: string}
+        squareFootage: {x-observed-type: integer}
+    UserRecommendationProfile:
+      type: object
+      x-contract-evidence: src/types/recommendation.types.ts#AllRecommendationsResponseSchema.userRecommendationProfiles
+      required: [label, expectedRecommendationIds]
+      properties:
+        label: {type: string}
+        expectedRecommendationIds:
+          type: array
+          description: Empty and populated arrays merged; string items also supported by the declared contract.
+          items: {type: string}
+    ReferralFixture:
+      type: object
+      description: Sample-derived referral UI response; requiredness has no established contract evidence.
+      x-source: src/mockdata/referred.mock.json
+      properties:
+        status: {type: string}
+        message: {$ref: '#/components/schemas/ReferralMessage'}
+        review: {$ref: '#/components/schemas/ReferralReview'}
+        progress: {$ref: '#/components/schemas/ReferralProgress'}
+        notifications: {$ref: '#/components/schemas/ReferralNotifications'}
+    ReferralMessage:
+      type: object
+      properties:
+        title: {type: string}
+        description: {type: string}
+        reassurance: {type: string}
+    ReferralReview:
+      type: object
+      properties:
+        expectedTurnaround: {type: string}
+        categories: {type: array, items: {type: string}}
+    ReferralProgress:
+      type: object
+      properties:
+        status: {type: string}
+    ReferralNotifications:
+      type: object
+      properties:
+        email: {type: boolean}
+        sms: {type: boolean}
+    TelematicsFixture:
+      type: object
+      x-source: src/mockdata/telematics.mock.json
+      x-contract-evidence: src/types/telematics.types.ts#TelematicsData
+      required: [selectedMonth, availableMonths, overallScore, maxScore, statusLabel, percentileComparison, trendChange, trendLabel, weeklyTrends, subScores, dashboardBannerText]
+      properties:
+        selectedMonth: {type: string}
+        selectedTimeframe: {type: string}
+        availableTimeframes: {type: array, items: {type: string}}
+        availableMonths: {type: array, items: {type: string}}
+        overallScore: {type: number}
+        maxScore: {type: number}
+        statusLabel: {type: string}
+        percentileComparison: {type: string}
+        trendChange: {type: number}
+        trendLabel: {type: string}
+        weeklyTrends:
+          type: array
+          items: {$ref: '#/components/schemas/TelematicsTrendPoint'}
+        subScores:
+          type: array
+          items: {$ref: '#/components/schemas/TelematicsSubScore'}
+        dashboardBannerText: {type: string}
+        timeframeRecords:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/TelematicsTimeframeRecord'}
+    TelematicsTrendPoint:
+      type: object
+      description: Merges weeklyTrends and points across every timeframe; year and monthName are optional.
+      x-contract-evidence: src/types/telematics.types.ts#WeeklyTrendPoint
+      required: [id, weekLabel, dateRange, periodTitle, overallScore, subScores]
+      properties:
+        id: {type: string}
+        weekLabel: {type: string}
+        dateRange: {type: string}
+        periodTitle: {type: string}
+        year: {type: string}
+        monthName: {type: string}
+        overallScore: {type: number}
+        subScores: {$ref: '#/components/schemas/TelematicsWeeklySubScores'}
+    TelematicsWeeklySubScores:
+      type: object
+      x-contract-evidence: src/types/telematics.types.ts#WeeklySubScores
+      required: [braking, speeding, phoneDistraction]
+      properties:
+        braking: {type: number}
+        speeding: {type: number}
+        phoneDistraction: {type: number}
+    TelematicsSubScore:
+      type: object
+      x-contract-evidence: src/types/telematics.types.ts#SubScore
+      required: [category, name, score, maxScore, indicator, indicatorLabel, description, coachingTip]
+      properties:
+        category: {type: string}
+        name: {type: string}
+        score: {type: number}
+        maxScore: {type: number}
+        indicator: {type: string}
+        indicatorLabel: {type: string}
+        description: {type: string}
+        coachingTip: {type: string}
+    TelematicsTimeframeRecord:
+      type: object
+      x-contract-evidence: src/types/telematics.types.ts#TimeframeRecord
+      required: [id, label, subtitle, headerSubtitle, overallScore, maxScore, statusLabel, percentileComparison, trendChange, trendLabel, points, subScores]
+      properties:
+        id: {type: string}
+        label: {type: string}
+        subtitle: {type: string}
+        headerSubtitle: {type: string}
+        overallScore: {type: number}
+        maxScore: {type: number}
+        statusLabel: {type: string}
+        percentileComparison: {type: string}
+        trendChange: {type: number}
+        trendLabel: {type: string}
+        defaultSelectedPointId: {type: string}
+        points:
+          type: array
+          items: {$ref: '#/components/schemas/TelematicsTrendPoint'}
+        subScores:
+          type: array
+          items: {$ref: '#/components/schemas/TelematicsSubScore'}
+    UserPoliciesFixture:
+      type: object
+      description: >-
+        The dictionary shape is evidenced by UserPoliciesResponseSchema, but
+        its PolicySchema item contract conflicts with these fixtures. Items use
+        a separate schema with unresolved requiredness, not the Policy schema.
+      x-source: src/mockdata/user-policies.mock.json
+      x-contract-evidence: src/types/policy.types.ts#UserPoliciesResponseSchema
+      required: [userPolicies]
+      properties:
+        userPolicies:
+          type: object
+          additionalProperties:
+            type: array
+            description: All seven user entries merged, including an empty array.
+            items: {$ref: '#/components/schemas/UserPolicySample'}
+    UserPolicySample:
+      type: object
+      description: >-
+        Eleven sample records omit customerId, productId, and namedInsureds
+        required by the declared PolicySchema. Required fields are deliberately
+        unspecified for this conflicting fixture shape. Monetary number types
+        use the nearby policy contract rather than incidental integral samples.
+      properties:
+        id: {type: string}
+        policyNumber: {type: string}
+        type: {type: string}
+        provider: {type: string}
+        premiumAmount: {type: number}
+        coverageAmount: {type: number}
+        startDate: {type: string}
+        endDate: {type: string}
+        nextPaymentDueDate: {type: string}
+        status: {type: string}
+        vehicles:
+          type: array
+          items: {$ref: '#/components/schemas/PolicyVehicle'}
+    UsersFixture:
+      type: object
+      description: Local mock credential dataset; no declared HTTP envelope or public credential response is evidenced.
+      x-source: src/mockdata/users.mock.json
+      properties:
+        users:
+          type: array
+          items: {$ref: '#/components/schemas/MockCredentialUser'}
+    MockCredentialUser:
+      type: object
+      description: >-
+        MockUserJson supports required id, name, email, and role with optional
+        password and phone. Password is present in fixtures but is not part of
+        the public UserSchema. No secret values or credential examples included.
+      x-contract-evidence: src/services/auth.service.ts#MockUserJson
+      required: [id, name, email, role]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        email: {type: string}
+        password: {type: string}
+        role: {type: string}
+        phone: {type: string}
+    VehiclesFixture:
+      type: object
+      x-source: src/mockdata/vehicle.mock.json
+      x-contract-evidence: src/types/vehicleDriver.types.ts#VehiclesResponseSchema
+      required: [vehicles]
+      properties:
+        vehicles:
+          type: array
+          items: {$ref: '#/components/schemas/Vehicle'}
+    Vehicle:
+      type: object
+      description: Lookup fixture vehicle; custom isValidVin refinement is not translated into an invented pattern.
+      x-contract-evidence: src/types/vehicleDriver.types.ts#VehicleSchema
+      required: [vin, make, model, year]
+      properties:
+        vin: {type: string}
+        make: {type: string}
+        model: {type: string}
+        year: {type: integer}
