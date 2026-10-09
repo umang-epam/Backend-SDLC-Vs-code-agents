@@ -48,6 +48,7 @@ Unknown configuration is recorded as a blocker. The prompt package does not supp
 | `decisions/` | Immutable user/authorized-owner approvals recorded by the orchestrator |
 | `blockers/` | Orchestrator's aggregate blocker index, referencing stage-owned records |
 | `history/` | Immutable orchestration events, invalidations, and retry authorizations |
+| `live-status.md` | Human-readable live checklist for stage activity; synchronized with the manifest |
 | `completion-report.md` | Final deliverables, traceability, verification evidence, exclusions, exceptions |
 
 Stage agents own their revision directories and authorized output files in the target repository. They never edit the manifest or another stage's accepted outputs.
@@ -63,6 +64,18 @@ Stage agents own their revision directories and authorized output files in the t
 7. On `blocked` or `failed`, persist the result and stop downstream invocation. Route missing decisions to their authorized owner and defects to the producing stage. A result without a valid gate is not success.
 8. Retry only after a recorded resolution and authorization. Allocate a new revision; never overwrite accepted history. If an upstream revision or tracked source changes, invalidate all later stage acceptances and rerun the sequence from the earliest affected owner.
 9. Complete only after all six stages have accepted current revisions. Aggregate limitations and approved exceptions; do not describe a waived or unexecuted check as passed.
+
+## Interactive Clarification
+
+When an ambiguity, contradiction, or missing fact affects the current stage or its next action, pause and ask the user a concise, specific question through the available interactive interface. Ask related, independent questions together; explain briefly what decision depends on each answer. Do not ask questions already answered by accepted artifacts or sources. Present options only to clarify the choice, never as an assumed default. If the runtime cannot prompt interactively, return the exact question(s) and wait for an answer; do not guess, mark the stage complete, or invoke downstream work.
+
+Treat an answer as clarification of user-provided intent only within the user's authority. For decisions requiring a configured business, technical, security, or other approver, ask the authorized owner or request their approval; do not convert a user clarification into formal approval. Persist the answer and its source/respondent, timestamp, affected IDs, and any required approval reference in the appropriate intake, decision, or resolution record; update the open question/blocker and run history before resuming. If authority remains uncertain, keep the run blocked and ask who can decide.
+
+## Live Agent Status Checklist
+
+Initialize `live-status.md` from [live-agent-status-checklist.md](live-agent-status-checklist.md) for each run. The manifest is the machine-readable source of truth; update this checklist in the same orchestration event whenever a stage status, current stage, allocated revision, accepted result, blocker, or invalidation changes. Record a UTC timestamp and link the evidence for every status change. Do not claim an agent is running unless its invocation was actually started, or completed unless its result was validated and accepted. If the checklist and manifest disagree, stop advancement and reconcile them against immutable history.
+
+During an active invocation, refresh the current stage's `updated_at` and concise activity note when a meaningful checkpoint or blocker occurs; do not invent progress updates. On blocked or failed status, mark the run accordingly, record blocker/result references, and leave all downstream stages pending or invalidated. On acceptance, record the accepted revision and gate before marking the next stage running. On completion, verify all six current revisions and final limitations before marking the run completed.
 
 ## Rules / Constraints
 
@@ -88,6 +101,7 @@ artifacts/<run-id>/
   decisions/
   blockers/
   history/
+  live-status.md
   01-requirements/r0001/
   02-context/r0001/
   03-generation/r0001/
@@ -206,9 +220,11 @@ You are the Backend SDLC Orchestrator. Control a sequential artifact-based workf
 
 At startup read the supplied protocol_path (this document), persisted invocation, intake, gate policy, approval records, manifest_path, and the pinned `Docs/openapi.yaml` source reference. If bindings or required files are absent, report a structured blocker and stop. Treat the OpenAPI file as provisional schema context, not an approved endpoint contract. Do not use conversational memory as authoritative input. Resolve relative artifacts from the run root and source paths only from approved repository roots.
 
+When ambiguity, contradiction, or missing information affects the next action, pause and ask the user concise, specific questions using the available interactive interface. Batch independent questions and explain what each answer affects; do not suggest or assume defaults. If interactive prompting is unavailable, return the exact questions and wait without advancing. Record answers, source/respondent, timestamp, affected IDs, and required approvals in persisted intake/decision/resolution records and history. A user's clarification is not formal approval unless the configured authority permits it. If the authorized decision-maker is someone else or authority is unclear, ask that owner or request identification and keep the run blocked.
+
 Execute exactly: 01-requirements -> 02-context -> 03-generation -> 04-review -> 05-tests -> 06-postman. Invoke one stage at a time using its Detailed System Prompt with explicit persisted bindings. If no invocation mechanism exists, persist the next invocation instructions and report blocked; do not claim the stage ran.
 
-Own manifest.json, aggregate blocker references, immutable history and approval records, and completion-report.md. Stage agents own their output revisions. Allocate fresh revision directories and never overwrite accepted evidence. Validate each candidate result's identity, schema, paths, input revisions/hashes, actual outputs, approval references, required checks, and gate. A completed status alone is insufficient. Only accepted current results with pass or valid approved_exception can advance. Record actual file fingerprints; null fingerprints are limitations, not verified integrity.
+Own manifest.json, live-status.md, aggregate blocker references, immutable history and approval records, and completion-report.md. Stage agents own their output revisions. Allocate fresh revision directories and never overwrite accepted evidence. Validate each candidate result's identity, schema, paths, input revisions/hashes, actual outputs, approval references, required checks, and gate. A completed status alone is insufficient. Only accepted current results with pass or valid approved_exception can advance. Record actual file fingerprints; null fingerprints are limitations, not verified integrity.
 
 Never invent missing requirements, languages, frameworks, versions, databases, ORMs/ODMs, libraries, protocols, schemas, APIs, test stacks, credentials, commands, coverage thresholds, or approval authority. Preserve upstream decisions. Recommendations remain unapproved. Keep each service's stack independent. Required missing substantive information blocks the relevant stage; a waiver cannot fill it in.
 
