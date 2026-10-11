@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ConsentCategory {
+  PRIVACY_POLICY
+  TERMS_OF_SERVICE
+  MARKETING_EMAIL
+  MARKETING_SMS
+}
+
+model User {
+  id            String              @id @default(uuid())
+  email         String              @unique
+  passwordHash  String
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  profile       UserProfile?
+  preference    UserPreference?
+  consents      UserConsent[]
+  resetTokens   PasswordResetToken[]
+}
+
+model UserProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  firstName   String?
+  lastName    String?
+  displayName String?
+  phone       String?
+  locale      String?
+  timezone    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserPreference {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  language           String   @default("en")
+  theme              String   @default("system")
+  marketingEmailOptIn Boolean  @default(false)
+  marketingSmsOptIn   Boolean  @default(false)
+  productEmailOptIn   Boolean  @default(true)
+  productPushOptIn    Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserConsent {
+  id            String          @id @default(uuid())
+  userId        String
+  category      ConsentCategory
+  granted       Boolean
+  policyVersion String
+  grantedAt     DateTime        @default(now())
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+}
+
+model PasswordResetToken {
+  id         String   @id @default(uuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "run_id": "manual-run-20261009-001",
+  "stage_id": "06-postman",
+  "revision": 1,
+  "status": "blocked",
+  "service_ids": [],
+  "input_artifacts": [
+    {
+      "path": "Docs/openapi.yaml",
+      "revision": null,
+      "sha256": null
+    }
+  ],
+  "output_artifacts": [
+    {
+      "path": "06-postman/r0001/postman-index.json",
+      "sha256": null
+    },
+    {
+      "path": "06-postman/r0001/api-coverage.json",
+      "sha256": null
+    },
+    {
+      "path": "06-postman/r0001/unsupported-interfaces.json",
+      "sha256": null
+    },
+    {
+      "path": "06-postman/r0001/postman-results.json",
+      "sha256": null
+    },
+    {
+      "path": "06-postman/r0001/postman-summary.md",
+      "sha256": null
+    }
+  ],
+  "approved_decision_refs": [],
+  "blockers": [
+    {
+      "id": "BLK-POSTMAN-001",
+      "service_id": "all",
+      "requirement_ids": [],
+      "kind": "missing_information",
+      "description": "Accepted predecessor artifacts (01-05) are unavailable, so approved contract operations and test assertions cannot be mapped to Postman requests.",
+      "evidence_refs": [
+        "artifacts/manual-run-20261009-001/06-postman/r0001/postman-summary.md"
+      ],
+      "owner": "orchestrator",
+      "resolution_needed": "Provide accepted and current revisions for requirements, context contracts, generation outputs, review outputs, and test outputs."
+    },
+    {
+      "id": "BLK-POSTMAN-002",
+      "service_id": "all",
+      "requirement_ids": [],
+      "kind": "missing_information",
+      "description": "Orchestrator invocation bindings and gate policy references are missing (`manifest_path`, `protocol_path`, and policy inputs).",
+      "evidence_refs": [
+        "agents/orchestrator.md",
+        "agents/06-postman-agent.md"
+      ],
+      "owner": "orchestrator",
+      "resolution_needed": "Run stage 06 via orchestrator with explicit invocation bindings and accepted input references."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHK-POSTMAN-PREREQ",
+      "status": "failed",
+      "required": true,
+      "evidence_ref": "06-postman/r0001/postman-summary.md",
+      "reason": "Required accepted inputs are missing."
+    },
+    {
+      "id": "CHK-POSTMAN-GENERATION",
+      "status": "not_run",
+      "required": true,
+      "evidence_ref": null,
+      "reason": "Cannot generate supported requests without approved operation definitions and test expectations."
+    },
+    {
+      "id": "CHK-POSTMAN-EXECUTION",
+      "status": "not_run",
+      "required": false,
+      "evidence_ref": null,
+      "reason": "Collection execution is not applicable before collection generation prerequisites are satisfied."
+    }
+  ],
+  "gate": {
+    "disposition": "block",
+    "approval_refs": []
+  },
+  "next_stage": null,
+  "handoff_eligible": false
+}

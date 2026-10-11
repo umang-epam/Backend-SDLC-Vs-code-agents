@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "run_id": "manual-run-20261009-001",
+  "stage_id": "06-postman",
+  "revision": 1,
+  "results": [
+    {
+      "id": "CHK-POSTMAN-001",
+      "kind": "prerequisite-validation",
+      "artifact_refs": [],
+      "tool_version_ref": null,
+      "command": null,
+      "environment_ref": null,
+      "status": "not_run",
+      "required": true,
+      "exit_code": null,
+      "evidence_ref": null,
+      "reason": "Accepted predecessor artifacts and orchestrator invocation bindings are missing."
+    }
+  ]
+}
