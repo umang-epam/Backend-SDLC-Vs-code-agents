@@ -1,6 +1,6 @@
 'use strict';
 
-const POLL_MS = 3000;
+const POLL_MS = 10000;
 const STALE_MS = 120000;
 const STAGE_LABELS = {
   '01-requirements': 'Requirements',

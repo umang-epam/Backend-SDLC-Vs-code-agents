@@ -71,7 +71,13 @@ function parseStatus(markdown) {
 
   snapshot.runId = values.get('Run ID') || '';
   snapshot.status = values.get('Overall status') || '';
-  snapshot.currentStage = values.get('Current stage') || '';
+  const rawCurrentStage = values.get('Current stage') || '';
+  const normalizedStage = rawCurrentStage.toLowerCase();
+  if (['null', 'none', '-', 'n/a', ''].includes(normalizedStage) || normalizedStage.startsWith('none') || normalizedStage.startsWith('null')) {
+    snapshot.currentStage = 'null';
+  } else {
+    snapshot.currentStage = rawCurrentStage;
+  }
   snapshot.lastUpdated = values.get('Last updated (UTC)') || '';
   snapshot.manifest = values.get('Manifest') || '';
   snapshot.latestHistoryEvent = values.get('Latest history event') || '';
