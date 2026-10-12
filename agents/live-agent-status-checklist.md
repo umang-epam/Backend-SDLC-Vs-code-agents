@@ -9,6 +9,7 @@ Initialize one copy at `artifacts/<run-id>/live-status.md` for each run. The orc
 - Current stage: `01-requirements` | `02-context` | `03-generation` | `04-review` | `05-tests` | `06-postman` | `null`
 - Last updated (UTC):
 - Manifest: `manifest.json`
+- Detailed Status & Metrics: `detailed-status.md` | `execution-metrics.json`
 - Latest history event:
 
 ## Stage Status

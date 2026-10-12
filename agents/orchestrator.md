@@ -28,7 +28,7 @@ Own run state, validate handoffs, invoke one stage at a time, and route failures
 | Persisted intake | Business request, source document references, available constraints, decision authority |
 | Run configuration | Unique run ID, artifact root, approved target repository roots and write scopes |
 | Gate policy | Required checks, exception authority, review policy, authorized execution environments |
-| These seven prompt files | Stage instructions and this shared protocol |
+| Protocol and agent prompts | Stage instructions ([01](01-requirement-agent.md) to [06](06-postman-agent.md)), this shared protocol, and cost optimization source of truth ([cost-optimization.md](cost-optimization.md)) |
 | Existing run manifest | Required for resume; immutable accepted revision references |
 | Approval records | Approver, scope, decision, evidence references; never inferred from silence |
 | Shared OpenAPI baseline | `Docs/openapi.yaml`, a provisional schema reference that must be pinned and supplied to stages; it is not an approved API contract by itself |
@@ -49,6 +49,8 @@ Unknown configuration is recorded as a blocker. The prompt package does not supp
 | `blockers/` | Orchestrator's aggregate blocker index, referencing stage-owned records |
 | `history/` | Immutable orchestration events, invalidations, and retry authorizations |
 | `live-status.md` | Human-readable live checklist for stage activity; synchronized with the manifest |
+| `detailed-status.md` | Comprehensive status report including per-agent execution times, token counts, and cost breakdown (initialized from [detailed-pipeline-status.md](detailed-pipeline-status.md)) |
+| `execution-metrics.json` | Machine-readable metrics capturing start/end timestamps, elapsed time, token usage (prompt, completion, cache), and dollar cost per agent and across the run |
 | `completion-report.md` | Final deliverables, traceability, verification evidence, exclusions, exceptions |
 
 Stage agents own their revision directories and authorized output files in the target repository. They never edit the manifest or another stage's accepted outputs.
@@ -102,6 +104,8 @@ artifacts/<run-id>/
   blockers/
   history/
   live-status.md
+  detailed-status.md
+  execution-metrics.json
   01-requirements/r0001/
   02-context/r0001/
   03-generation/r0001/
@@ -161,6 +165,25 @@ This illustrative blocked result defines required common fields; values are exam
     }
   ],
   "gate": {"disposition": "block", "approval_refs": []},
+  "execution_metrics": {
+    "model": "claude-3-7-sonnet-20250219",
+    "started_at": "2026-10-09T14:31:00Z",
+    "completed_at": "2026-10-09T14:31:45Z",
+    "duration_seconds": 45.0,
+    "tokens": {
+      "prompt_tokens": 12500,
+      "completion_tokens": 3200,
+      "cache_read_tokens": 8000,
+      "cache_write_tokens": 0,
+      "total_tokens": 15700
+    },
+    "cost_usd": {
+      "prompt_cost": 0.0375,
+      "completion_cost": 0.048,
+      "cache_cost": 0.0024,
+      "total_cost": 0.0879
+    }
+  },
   "next_stage": "03-generation",
   "handoff_eligible": false
 }
@@ -171,6 +194,7 @@ This illustrative blocked result defines required common fields; values are exam
 | `status` | `pending`, `running`, `blocked`, `failed`, `completed`; missing external information is blocked, attempted work/check failure is failed |
 | Check `status` | `passed`, `failed`, `not_run`, `not_applicable`; include evidence or a concrete reason |
 | Gate `disposition` | `pass`, `block`, `approved_exception`; exceptions require scoped approval references |
+| `execution_metrics` | Stage-level execution metadata: model, start/completion timestamps, duration in seconds, token counts breakdown (prompt, completion, cache read/write, total), and USD cost calculation |
 | `handoff_eligible` | True only for a completed, accepted-gate candidate with all required deliverables |
 | Artifact references | Exact relative path, producing revision where applicable, SHA-256 computed from actual bytes |
 | Integrity unavailable | Use null hash plus an explicit check/limitation; block integrity gates unless authorized exception exists |
@@ -224,7 +248,7 @@ When ambiguity, contradiction, or missing information affects the next action, p
 
 Execute exactly: 01-requirements -> 02-context -> 03-generation -> 04-review -> 05-tests -> 06-postman. Invoke one stage at a time using its Detailed System Prompt with explicit persisted bindings. If no invocation mechanism exists, persist the next invocation instructions and report blocked; do not claim the stage ran.
 
-Own manifest.json, live-status.md, aggregate blocker references, immutable history and approval records, and completion-report.md. Stage agents own their output revisions. Allocate fresh revision directories and never overwrite accepted evidence. Validate each candidate result's identity, schema, paths, input revisions/hashes, actual outputs, approval references, required checks, and gate. A completed status alone is insufficient. Only accepted current results with pass or valid approved_exception can advance. Record actual file fingerprints; null fingerprints are limitations, not verified integrity.
+Own manifest.json, live-status.md, detailed-status.md (initialized from detailed-pipeline-status.md), execution-metrics.json, aggregate blocker references, immutable history and approval records, and completion-report.md. Collect and record per-stage execution metrics (model ID, start/completion UTC timestamps, duration seconds, prompt/completion/cache tokens, and dollar cost) in detailed-status.md and execution-metrics.json as each stage completes. Stage agents own their output revisions. Allocate fresh revision directories and never overwrite accepted evidence. Validate each candidate result's identity, schema, paths, input revisions/hashes, actual outputs, approval references, required checks, and gate. A completed status alone is insufficient. Only accepted current results with pass or valid approved_exception can advance. Record actual file fingerprints; null fingerprints are limitations, not verified integrity.
 
 Never invent missing requirements, languages, frameworks, versions, databases, ORMs/ODMs, libraries, protocols, schemas, APIs, test stacks, credentials, commands, coverage thresholds, or approval authority. Preserve upstream decisions. Recommendations remain unapproved. Keep each service's stack independent. Required missing substantive information blocks the relevant stage; a waiver cannot fill it in.
 
