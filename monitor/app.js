@@ -162,10 +162,23 @@ function formatCost(num) {
   return `$${Number(num).toFixed(4)}`;
 }
 
+function getStageMetricsList(metrics) {
+  if (!metrics?.stages) return [];
+  if (Array.isArray(metrics.stages)) return metrics.stages;
+  if (typeof metrics.stages === 'object' && metrics.stages !== null) {
+    return Object.entries(metrics.stages).map(([key, val]) => ({
+      stage_id: val?.stage_id || key,
+      ...(typeof val === 'object' ? val : {})
+    }));
+  }
+  return [];
+}
+
 function getStageMetric(stageId) {
-  if (!latestStatus?.metrics?.stages) return null;
+  const stageMetrics = getStageMetricsList(latestStatus?.metrics);
+  if (!stageMetrics.length) return null;
   const num = stageIndex(stageId);
-  return latestStatus.metrics.stages.find((s) => s.stage_id === stageId || s.stage_id?.startsWith(num)) || null;
+  return stageMetrics.find((s) => s.stage_id === stageId || s.stage_id?.startsWith(num)) || null;
 }
 
 function buildRows(stages) {
@@ -196,9 +209,11 @@ function buildRows(stages) {
     statusCell.append(chip);
     const revisionCell = newTextElement('td', 'revision', stage.revision);
     const gateCell = newTextElement('td', 'gate-value', stage.gate);
-    const durationCell = newTextElement('td', 'mono', stageMetric ? formatSeconds(stageMetric.execution_seconds) : '--');
+    const duration = stageMetric ? (stageMetric.execution_seconds ?? stageMetric.duration_seconds) : null;
+    const cost = stageMetric ? (stageMetric.cost_usd ?? stageMetric.total_cost_usd) : null;
+    const durationCell = newTextElement('td', 'mono', stageMetric ? formatSeconds(duration) : '--');
     const tokensCell = newTextElement('td', 'mono', stageMetric ? formatTokens(stageMetric.total_tokens) : '--');
-    const costCell = newTextElement('td', 'mono cost-cell', stageMetric ? formatCost(stageMetric.cost_usd) : '--');
+    const costCell = newTextElement('td', 'mono cost-cell', stageMetric ? formatCost(cost) : '--');
     const updatedCell = newTextElement('td', 'mono', displayTime(stage.updatedAt));
     row.append(nameCell, statusCell, revisionCell, gateCell, durationCell, tokensCell, costCell, updatedCell);
     elements.rows.append(row);
@@ -255,10 +270,18 @@ function showStage(stage) {
   elements.detailGate.textContent = stage.gate || '--';
 
   if (stageMetric) {
+    const duration = stageMetric.execution_seconds ?? stageMetric.duration_seconds;
+    const cost = stageMetric.cost_usd ?? stageMetric.total_cost_usd;
+    const inputTokens = stageMetric.input_tokens ?? stageMetric.prompt_tokens;
+    const cachedTokens = stageMetric.cached_tokens ?? stageMetric.cache_read_tokens ?? 0;
+    const outputTokens = stageMetric.output_tokens ?? stageMetric.completion_tokens;
+    const promptCombined = (inputTokens || 0) + (cachedTokens || 0);
+    const cacheHitRate = stageMetric.cache_hit_rate_pct ?? (promptCombined ? Math.round((cachedTokens / promptCombined) * 100) : 0);
+
     elements.detailModel.textContent = `${stageMetric.model_tier || 'Default'} (${stageMetric.model_id || 'Gemini 3.7 Flash'})`;
-    elements.detailStageDuration.textContent = `${formatSeconds(stageMetric.execution_seconds)} (${stageMetric.duration_pct ? stageMetric.duration_pct + '%' : 'runtime'})`;
-    elements.detailStageTokens.textContent = `${formatTokens(stageMetric.total_tokens)} (Prompt: ${formatTokens(stageMetric.input_tokens)} | Cached: ${formatTokens(stageMetric.cached_tokens || 0)} | Out: ${formatTokens(stageMetric.output_tokens)})`;
-    elements.detailStageCost.textContent = `${formatCost(stageMetric.cost_usd)} (Cache Hit: ${stageMetric.cache_hit_rate_pct || 0}%)`;
+    elements.detailStageDuration.textContent = `${formatSeconds(duration)} (${stageMetric.duration_pct ? stageMetric.duration_pct + '%' : 'runtime'})`;
+    elements.detailStageTokens.textContent = `${formatTokens(stageMetric.total_tokens)} (Prompt: ${formatTokens(inputTokens)} | Cached: ${formatTokens(cachedTokens)} | Out: ${formatTokens(outputTokens)})`;
+    elements.detailStageCost.textContent = `${formatCost(cost)} (Cache Hit: ${cacheHitRate}%)`;
     setSkills(stage.id, stageMetric.skills_used);
   } else {
     elements.detailModel.textContent = 'Configured in Orchestrator';
@@ -274,8 +297,53 @@ function showStage(stage) {
   setReferences(stage.references);
 }
 
+function getTelemetrySummary(metrics) {
+  if (!metrics) return null;
+  if (metrics.summary) return metrics.summary;
+  if (metrics.totals) {
+    const t = metrics.totals;
+    const prompt = t.prompt_tokens || 0;
+    const cache = t.cache_read_tokens || 0;
+    const promptCombined = prompt + cache;
+    return {
+      total_wall_clock_seconds: t.wall_clock_seconds ?? t.wall_clock_duration_seconds ?? 0,
+      total_agent_execution_seconds: t.agent_execution_seconds ?? t.cumulative_agent_duration_seconds ?? 0,
+      total_tokens: t.total_tokens ?? 0,
+      total_input_tokens: prompt,
+      total_output_tokens: t.completion_tokens || 0,
+      prompt_cache_hit_rate_pct: promptCombined ? (cache / promptCombined) * 100 : 0,
+      total_cached_tokens: cache,
+      total_cost_usd: t.cost_usd ?? t.total_cost_usd ?? 0,
+      cost_savings_usd: 0,
+      cost_savings_pct: 0,
+    };
+  }
+  if (metrics.timing_summary || metrics.token_summary || metrics.cost_summary) {
+    const timing = metrics.timing_summary || {};
+    const tokens = metrics.token_summary || {};
+    const cost = metrics.cost_summary || {};
+    const prompt = tokens.total_prompt_tokens || 0;
+    const cache = tokens.total_cache_read_tokens || 0;
+    const promptCombined = prompt + cache;
+    return {
+      total_wall_clock_seconds: timing.wall_clock_duration_seconds || 0,
+      total_agent_execution_seconds: timing.cumulative_agent_duration_seconds || 0,
+      total_tokens: tokens.total_pipeline_tokens ?? tokens.total_tokens ?? 0,
+      total_input_tokens: prompt,
+      total_output_tokens: tokens.total_completion_tokens || 0,
+      prompt_cache_hit_rate_pct: promptCombined ? (cache / promptCombined) * 100 : 0,
+      total_cached_tokens: cache,
+      total_cost_usd: cost.total_pipeline_cost_usd ?? cost.total_cost_usd ?? 0,
+      cost_savings_usd: 0,
+      cost_savings_pct: 0,
+    };
+  }
+  return null;
+}
+
 function renderTelemetry(metrics, stages) {
-  if (!metrics?.summary) {
+  const s = getTelemetrySummary(metrics);
+  if (!s) {
     elements.metricDuration.textContent = '--';
     elements.metricDurationSub.textContent = 'Agent Execution: --';
     elements.metricTokens.textContent = '--';
@@ -288,7 +356,6 @@ function renderTelemetry(metrics, stages) {
     return;
   }
 
-  const s = metrics.summary;
   elements.metricDuration.textContent = formatSeconds(s.total_wall_clock_seconds);
   elements.metricDurationSub.textContent = `Cumulative Agent Time: ${formatSeconds(s.total_agent_execution_seconds)}`;
 
@@ -302,7 +369,8 @@ function renderTelemetry(metrics, stages) {
   const savingsPct = s.cost_savings_pct ? `${s.cost_savings_pct.toFixed(0)}%` : '--';
   elements.metricCostSavings.textContent = `Savings: ${formatCost(s.cost_savings_usd || 0)} (${savingsPct})`;
 
-  renderWaterfall(metrics.stages || [], s.total_agent_execution_seconds, s.total_cost_usd);
+  const stageMetrics = getStageMetricsList(metrics);
+  renderWaterfall(stageMetrics, s.total_agent_execution_seconds, s.total_cost_usd);
 }
 
 function renderWaterfall(stageMetrics, totalDuration, totalCost) {
@@ -312,9 +380,11 @@ function renderWaterfall(stageMetrics, totalDuration, totalCost) {
     return;
   }
 
-  const maxDur = Math.max(...stageMetrics.map((m) => m.execution_seconds || 1), 1);
+  const maxDur = Math.max(...stageMetrics.map((m) => (m.execution_seconds ?? m.duration_seconds) || 1), 1);
 
   for (const m of stageMetrics) {
+    const duration = m.execution_seconds ?? m.duration_seconds;
+    const cost = m.cost_usd ?? m.total_cost_usd;
     const row = document.createElement('div');
     row.className = `waterfall-row${selectedStage === m.stage_id ? ' is-selected' : ''}`;
     row.addEventListener('click', () => selectStage(m.stage_id));
@@ -326,16 +396,16 @@ function renderWaterfall(stageMetrics, totalDuration, totalCost) {
     const barArea = document.createElement('div');
     barArea.className = 'waterfall-bars';
 
-    const durWidth = Math.max(4, Math.round(((m.execution_seconds || 0) / maxDur) * 100));
+    const durWidth = Math.max(4, Math.round(((duration || 0) / maxDur) * 100));
     const durBar = document.createElement('div');
     durBar.className = 'waterfall-bar bar-duration';
     durBar.style.width = `${durWidth}%`;
-    durBar.title = `Duration: ${formatSeconds(m.execution_seconds)}`;
+    durBar.title = `Duration: ${formatSeconds(duration)}`;
     barArea.append(durBar);
 
     const stats = document.createElement('div');
     stats.className = 'waterfall-stats mono';
-    stats.innerHTML = `<span>${formatSeconds(m.execution_seconds)}</span><span>${formatTokens(m.total_tokens)} tok</span><span class="cost-tag">${formatCost(m.cost_usd)}</span>`;
+    stats.innerHTML = `<span>${formatSeconds(duration)}</span><span>${formatTokens(m.total_tokens)} tok</span><span class="cost-tag">${formatCost(cost)}</span>`;
 
     row.append(head, barArea, stats);
     elements.waterfallChart.append(row);
