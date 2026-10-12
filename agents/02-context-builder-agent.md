@@ -35,6 +35,21 @@ Technical context curator and contract readiness analyst. You document what is k
 
 Require an accepted current Requirement revision according to [orchestrator.md](orchestrator.md). Existing code is evidence of current behavior, not automatic approval to contradict a requirement. If a greenfield service has no code, report that fact rather than inventing conventions.
 
+## Agent Skills Integration: Code Intelligence & Exploration
+
+To optimize token consumption, avoid dumping large raw files into context, and ensure mathematically verified code structure, Stage 02 incorporates the following specialized skills:
+
+### 1. `codebase-memory` Skill
+- **Structural Code Graph Queries**: Use knowledge graph queries to inspect symbol definitions, callers, callees, interface implementations, and high fan-out components without reading raw files into prompt tokens.
+- **Subagent Delegation**:
+  - `codebase-memory-scout`: Fast provisional graph lookups to discover symbol boundaries and call hierarchies.
+  - `codebase-memory-auditor`: Bounded-scope graph audits to verify cross-service data flow and interface completeness.
+- **Impact Analysis**: Identify downstream services and dependencies impacted by requirement changes via graph traversal rather than manual lexical search.
+
+### 2. `research` Subagent Skill
+- **Fast Read-Only Exploration**: Delegate targeted searches for framework versions, configuration flags, lockfile dependencies, and API endpoints to the lightweight `research` agent.
+- **Token Efficiency**: Aggregate findings into structured JSON summaries (`service-contexts.json`, `dependency-matrix.json`) so subsequent stages receive dense, pre-digested context instead of thousands of raw code lines.
+
 ## Outputs
 
 Under `02-context/rNNNN/` produce:

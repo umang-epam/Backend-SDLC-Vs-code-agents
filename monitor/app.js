@@ -11,6 +11,15 @@ const STAGE_LABELS = {
   '06-postman': 'Postman',
 };
 
+const STAGE_DEFAULT_SKILLS = {
+  '01-requirements': ['research'],
+  '02-context': ['codebase-memory', 'research'],
+  '03-generation': ['plan', 'codebase-memory'],
+  '04-review': ['cross-review', 'sonarqube_analyze_file'],
+  '05-tests': ['codebase-memory', 'Test Case Generator'],
+  '06-postman': ['agent-browser'],
+};
+
 const elements = {
   select: document.querySelector('#run-select'),
   connection: document.querySelector('#connection'),
@@ -32,11 +41,25 @@ const elements = {
   pipeline: document.querySelector('#pipeline'),
   rows: document.querySelector('#stage-rows'),
   fileUpdated: document.querySelector('#file-updated'),
+  metricDuration: document.querySelector('#metric-duration'),
+  metricDurationSub: document.querySelector('#metric-duration-sub'),
+  metricTokens: document.querySelector('#metric-tokens'),
+  metricTokensSub: document.querySelector('#metric-tokens-sub'),
+  metricCacheHit: document.querySelector('#metric-cache-hit'),
+  metricCacheSub: document.querySelector('#metric-cache-sub'),
+  metricCost: document.querySelector('#metric-cost'),
+  metricCostSavings: document.querySelector('#metric-cost-savings'),
+  waterfallChart: document.querySelector('#waterfall-chart'),
   detailNumber: document.querySelector('#detail-number'),
   detailTitle: document.querySelector('#detail-title'),
   detailStatus: document.querySelector('#detail-status'),
   detailRevision: document.querySelector('#detail-revision'),
   detailGate: document.querySelector('#detail-gate'),
+  detailModel: document.querySelector('#detail-model'),
+  detailStageDuration: document.querySelector('#detail-stage-duration'),
+  detailStageTokens: document.querySelector('#detail-stage-tokens'),
+  detailStageCost: document.querySelector('#detail-stage-cost'),
+  detailSkills: document.querySelector('#detail-skills'),
   detailStarted: document.querySelector('#detail-started'),
   detailUpdated: document.querySelector('#detail-updated'),
   detailActivity: document.querySelector('#detail-activity'),
@@ -119,9 +142,36 @@ function buildPipeline(stages) {
   }
 }
 
+function formatSeconds(sec) {
+  if (sec === null || sec === undefined || Number.isNaN(sec)) return '--';
+  if (sec < 60) return `${Number(sec).toFixed(1)}s`;
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}m ${s}s`;
+}
+
+function formatTokens(num) {
+  if (num === null || num === undefined || Number.isNaN(num)) return '--';
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}k`;
+  return String(num);
+}
+
+function formatCost(num) {
+  if (num === null || num === undefined || Number.isNaN(num)) return '--';
+  return `$${Number(num).toFixed(4)}`;
+}
+
+function getStageMetric(stageId) {
+  if (!latestStatus?.metrics?.stages) return null;
+  const num = stageIndex(stageId);
+  return latestStatus.metrics.stages.find((s) => s.stage_id === stageId || s.stage_id?.startsWith(num)) || null;
+}
+
 function buildRows(stages) {
   elements.rows.replaceChildren();
   for (const stage of stages) {
+    const stageMetric = getStageMetric(stage.id);
     const row = document.createElement('tr');
     row.className = `stage-row${selectedStage === stage.id ? ' is-selected' : ''}`;
     row.tabIndex = 0;
@@ -146,9 +196,24 @@ function buildRows(stages) {
     statusCell.append(chip);
     const revisionCell = newTextElement('td', 'revision', stage.revision);
     const gateCell = newTextElement('td', 'gate-value', stage.gate);
+    const durationCell = newTextElement('td', 'mono', stageMetric ? formatSeconds(stageMetric.execution_seconds) : '--');
+    const tokensCell = newTextElement('td', 'mono', stageMetric ? formatTokens(stageMetric.total_tokens) : '--');
+    const costCell = newTextElement('td', 'mono cost-cell', stageMetric ? formatCost(stageMetric.cost_usd) : '--');
     const updatedCell = newTextElement('td', 'mono', displayTime(stage.updatedAt));
-    row.append(nameCell, statusCell, revisionCell, gateCell, updatedCell);
+    row.append(nameCell, statusCell, revisionCell, gateCell, durationCell, tokensCell, costCell, updatedCell);
     elements.rows.append(row);
+  }
+}
+
+function setSkills(stageId, customSkills) {
+  elements.detailSkills.replaceChildren();
+  const skills = customSkills?.length ? customSkills : (STAGE_DEFAULT_SKILLS[stageId] || []);
+  if (!skills.length) {
+    elements.detailSkills.textContent = '--';
+    return;
+  }
+  for (const skill of skills) {
+    elements.detailSkills.append(newTextElement('span', 'skill-chip', skill));
   }
 }
 
@@ -169,22 +234,139 @@ function showStage(stage) {
     setChip(elements.detailStatus, 'unknown');
     elements.detailRevision.textContent = 'REV --';
     elements.detailGate.textContent = '--';
+    elements.detailModel.textContent = '--';
+    elements.detailStageDuration.textContent = '--';
+    elements.detailStageTokens.textContent = '--';
+    elements.detailStageCost.textContent = '--';
     elements.detailStarted.textContent = '--';
     elements.detailUpdated.textContent = '--';
     elements.detailActivity.textContent = '--';
+    setSkills('', []);
     setReferences('');
     return;
   }
+
+  const stageMetric = getStageMetric(stage.id);
 
   elements.detailNumber.textContent = stageIndex(stage.id);
   elements.detailTitle.textContent = stage.agent || STAGE_LABELS[stage.id] || stage.id;
   setChip(elements.detailStatus, stage.status);
   elements.detailRevision.textContent = `REV ${stage.revision || '--'}`;
   elements.detailGate.textContent = stage.gate || '--';
+
+  if (stageMetric) {
+    elements.detailModel.textContent = `${stageMetric.model_tier || 'Default'} (${stageMetric.model_id || 'Gemini 3.7 Flash'})`;
+    elements.detailStageDuration.textContent = `${formatSeconds(stageMetric.execution_seconds)} (${stageMetric.duration_pct ? stageMetric.duration_pct + '%' : 'runtime'})`;
+    elements.detailStageTokens.textContent = `${formatTokens(stageMetric.total_tokens)} (Prompt: ${formatTokens(stageMetric.input_tokens)} | Cached: ${formatTokens(stageMetric.cached_tokens || 0)} | Out: ${formatTokens(stageMetric.output_tokens)})`;
+    elements.detailStageCost.textContent = `${formatCost(stageMetric.cost_usd)} (Cache Hit: ${stageMetric.cache_hit_rate_pct || 0}%)`;
+    setSkills(stage.id, stageMetric.skills_used);
+  } else {
+    elements.detailModel.textContent = 'Configured in Orchestrator';
+    elements.detailStageDuration.textContent = '--';
+    elements.detailStageTokens.textContent = '--';
+    elements.detailStageCost.textContent = '--';
+    setSkills(stage.id, STAGE_DEFAULT_SKILLS[stage.id]);
+  }
+
   elements.detailStarted.textContent = displayTime(stage.startedAt);
   elements.detailUpdated.textContent = displayTime(stage.updatedAt);
   elements.detailActivity.textContent = stage.activity || '--';
   setReferences(stage.references);
+}
+
+function renderTelemetry(metrics, stages) {
+  if (!metrics?.summary) {
+    elements.metricDuration.textContent = '--';
+    elements.metricDurationSub.textContent = 'Agent Execution: --';
+    elements.metricTokens.textContent = '--';
+    elements.metricTokensSub.textContent = 'Prompt: -- | Out: --';
+    elements.metricCacheHit.textContent = '--';
+    elements.metricCacheSub.textContent = 'Cached Reads: --';
+    elements.metricCost.textContent = '--';
+    elements.metricCostSavings.textContent = 'Optimization Savings: --';
+    renderWaterfallFallback(stages);
+    return;
+  }
+
+  const s = metrics.summary;
+  elements.metricDuration.textContent = formatSeconds(s.total_wall_clock_seconds);
+  elements.metricDurationSub.textContent = `Cumulative Agent Time: ${formatSeconds(s.total_agent_execution_seconds)}`;
+
+  elements.metricTokens.textContent = formatTokens(s.total_tokens);
+  elements.metricTokensSub.textContent = `Prompt: ${formatTokens(s.total_input_tokens)} | Out: ${formatTokens(s.total_output_tokens)}`;
+
+  elements.metricCacheHit.textContent = `${s.prompt_cache_hit_rate_pct?.toFixed(1) || '0.0'}%`;
+  elements.metricCacheSub.textContent = `Cached Reads: ${formatTokens(s.total_cached_tokens)}`;
+
+  elements.metricCost.textContent = formatCost(s.total_cost_usd);
+  const savingsPct = s.cost_savings_pct ? `${s.cost_savings_pct.toFixed(0)}%` : '--';
+  elements.metricCostSavings.textContent = `Savings: ${formatCost(s.cost_savings_usd || 0)} (${savingsPct})`;
+
+  renderWaterfall(metrics.stages || [], s.total_agent_execution_seconds, s.total_cost_usd);
+}
+
+function renderWaterfall(stageMetrics, totalDuration, totalCost) {
+  elements.waterfallChart.replaceChildren();
+  if (!stageMetrics.length) {
+    elements.waterfallChart.innerHTML = '<div class="waterfall-empty">No telemetry records persisted for this run.</div>';
+    return;
+  }
+
+  const maxDur = Math.max(...stageMetrics.map((m) => m.execution_seconds || 1), 1);
+
+  for (const m of stageMetrics) {
+    const row = document.createElement('div');
+    row.className = `waterfall-row${selectedStage === m.stage_id ? ' is-selected' : ''}`;
+    row.addEventListener('click', () => selectStage(m.stage_id));
+
+    const head = document.createElement('div');
+    head.className = 'waterfall-head';
+    head.innerHTML = `<span class="waterfall-code">${stageIndex(m.stage_id)}</span><strong>${STAGE_LABELS[m.stage_id] || m.stage_name || m.stage_id}</strong><span class="waterfall-tier">${m.model_tier || 'Fast'}</span>`;
+
+    const barArea = document.createElement('div');
+    barArea.className = 'waterfall-bars';
+
+    const durWidth = Math.max(4, Math.round(((m.execution_seconds || 0) / maxDur) * 100));
+    const durBar = document.createElement('div');
+    durBar.className = 'waterfall-bar bar-duration';
+    durBar.style.width = `${durWidth}%`;
+    durBar.title = `Duration: ${formatSeconds(m.execution_seconds)}`;
+    barArea.append(durBar);
+
+    const stats = document.createElement('div');
+    stats.className = 'waterfall-stats mono';
+    stats.innerHTML = `<span>${formatSeconds(m.execution_seconds)}</span><span>${formatTokens(m.total_tokens)} tok</span><span class="cost-tag">${formatCost(m.cost_usd)}</span>`;
+
+    row.append(head, barArea, stats);
+    elements.waterfallChart.append(row);
+  }
+}
+
+function renderWaterfallFallback(stages) {
+  elements.waterfallChart.replaceChildren();
+  for (const stage of stages) {
+    const row = document.createElement('div');
+    row.className = `waterfall-row${selectedStage === stage.id ? ' is-selected' : ''}`;
+    row.addEventListener('click', () => selectStage(stage.id));
+
+    const head = document.createElement('div');
+    head.className = 'waterfall-head';
+    head.innerHTML = `<span class="waterfall-code">${stageIndex(stage.id)}</span><strong>${STAGE_LABELS[stage.id] || stage.id}</strong><span class="waterfall-tier">${stage.agent || 'Agent'}</span>`;
+
+    const barArea = document.createElement('div');
+    barArea.className = 'waterfall-bars';
+    const durBar = document.createElement('div');
+    durBar.className = `waterfall-bar ${statusClass(stage.status)}`;
+    durBar.style.width = '100%';
+    barArea.append(durBar);
+
+    const stats = document.createElement('div');
+    stats.className = 'waterfall-stats mono';
+    stats.innerHTML = `<span>${stage.status.toUpperCase()}</span><span>REV ${stage.revision || '0001'}</span><span>--</span>`;
+
+    row.append(head, barArea, stats);
+    elements.waterfallChart.append(row);
+  }
 }
 
 function selectStage(stageId) {
@@ -192,6 +374,7 @@ function selectStage(stageId) {
   if (latestStatus) {
     buildPipeline(latestStatus.stages || []);
     buildRows(latestStatus.stages || []);
+    renderTelemetry(latestStatus.metrics, latestStatus.stages || []);
     showStage((latestStatus.stages || []).find((stage) => stage.id === selectedStage));
   }
 }
@@ -234,6 +417,7 @@ function renderStatus(status) {
   if (!stages.some((stage) => stage.id === selectedStage)) selectedStage = currentId && stages.some((stage) => stage.id === currentId) ? currentId : stages[0]?.id || '';
   buildPipeline(stages);
   buildRows(stages);
+  renderTelemetry(status.metrics, stages);
   showStage(stages.find((stage) => stage.id === selectedStage));
 }
 

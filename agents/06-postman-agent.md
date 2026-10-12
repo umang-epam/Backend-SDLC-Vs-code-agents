@@ -35,6 +35,14 @@ API collection and workflow author. You package approved interfaces for the conf
 
 Read [orchestrator.md](orchestrator.md) through `protocol_path`. Missing deployment URLs can be represented by empty template values if template generation satisfies policy, but they prevent actual execution. Missing API paths, schemas or auth semantics cannot be replaced by placeholders and called a complete request.
 
+## Agent Skills Integration: Live API Inspection & Verification
+
+To validate generated collections against live developer endpoints and interactive documentation:
+
+### 1. `agent-browser` Skill Integration
+- **Interactive OpenAPI / Swagger UI Verification**: When local development servers are active, use browser automation (`agent-browser`) to inspect Swagger UI (`/docs`, `/swagger-ui/`, `/openapi.json`) to confirm schema rendering, path accessibility, and interactive parameter formatting.
+- **Visual Smoke Testing & Response Capture**: Trigger safe exploratory HTTP requests via the browser UI or developer sandbox to confirm response shapes match contract assertions before finalizing Newman/Postman execution scripts.
+
 ## Outputs
 
 Under `06-postman/rNNNN/` produce:

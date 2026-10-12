@@ -54,9 +54,44 @@
         <div class="summary-stat summary-updated"><span class="eyebrow">LAST ARTIFACT UPDATE</span><strong id="last-updated" class="mono">--</strong><span id="stale-label" class="stale-label"></span></div>
       </section>
 
+      <section class="telemetry-deck" aria-label="Pipeline metrics and cost summary">
+        <div class="telemetry-card">
+          <span class="eyebrow">PIPELINE RUNTIME</span>
+          <div class="telemetry-val"><strong id="metric-duration">--</strong></div>
+          <span class="telemetry-sub" id="metric-duration-sub">Agent Execution: --</span>
+        </div>
+        <div class="telemetry-card">
+          <span class="eyebrow">TOTAL TOKEN USAGE</span>
+          <div class="telemetry-val"><strong id="metric-tokens">--</strong></div>
+          <span class="telemetry-sub" id="metric-tokens-sub">Prompt: -- | Out: --</span>
+        </div>
+        <div class="telemetry-card">
+          <span class="eyebrow">PROMPT CACHE EFFICIENCY</span>
+          <div class="telemetry-val"><strong id="metric-cache-hit" class="metric-highlight">--</strong></div>
+          <span class="telemetry-sub" id="metric-cache-sub">Cached Reads: --</span>
+        </div>
+        <div class="telemetry-card telemetry-cost-card">
+          <span class="eyebrow">TOTAL PIPELINE COST</span>
+          <div class="telemetry-val"><strong id="metric-cost" class="cost-value">--</strong></div>
+          <span class="telemetry-sub" id="metric-cost-savings">Optimization Savings: --</span>
+        </div>
+      </section>
+
       <section class="pipeline-section" aria-labelledby="pipeline-heading">
         <div class="section-heading"><div><span class="eyebrow">SEQUENCE 01-06</span><h2 id="pipeline-heading">Run path</h2></div><span id="manifest-ref" class="manifest-ref"></span></div>
         <ol id="pipeline" class="pipeline"></ol>
+      </section>
+
+      <section class="waterfall-section" aria-labelledby="waterfall-heading">
+        <div class="section-heading">
+          <div><span class="eyebrow">PIPELINE WATERFALL & RESOURCE PROFILES</span><h2 id="waterfall-heading">Stage Metrics & Cost Waterfall</h2></div>
+          <div class="waterfall-legend">
+            <span class="legend-item"><i class="legend-dot dot-duration"></i> Duration</span>
+            <span class="legend-item"><i class="legend-dot dot-tokens"></i> Tokens</span>
+            <span class="legend-item"><i class="legend-dot dot-cost"></i> Incurred Cost</span>
+          </div>
+        </div>
+        <div id="waterfall-chart" class="waterfall-chart"></div>
       </section>
 
       <section class="work-area">
@@ -64,7 +99,7 @@
           <div class="section-heading list-heading"><div><span class="eyebrow">PERSISTED STAGE RECORDS</span><h2>Stage ledger</h2></div><span id="file-updated" class="file-updated mono">FILE MTIME --</span></div>
           <div class="table-scroll">
             <table>
-              <thead><tr><th>Stage / agent</th><th>Status</th><th>Rev</th><th>Gate</th><th>Updated</th></tr></thead>
+              <thead><tr><th>Stage / agent</th><th>Status</th><th>Rev</th><th>Gate</th><th>Duration</th><th>Tokens</th><th>Cost</th><th>Updated</th></tr></thead>
               <tbody id="stage-rows"></tbody>
             </table>
           </div>
@@ -75,12 +110,17 @@
           <div class="detail-status-line"><span id="detail-status" class="status-chip status-unknown">UNKNOWN</span><span id="detail-revision" class="mono">REV --</span></div>
           <dl class="detail-fields">
             <div><dt>Gate</dt><dd id="detail-gate">--</dd></div>
+            <div><dt>Model & Tier</dt><dd id="detail-model" class="mono">--</dd></div>
+            <div><dt>Duration</dt><dd id="detail-stage-duration" class="mono">--</dd></div>
+            <div><dt>Token Usage</dt><dd id="detail-stage-tokens" class="mono">--</dd></div>
+            <div><dt>Stage Cost</dt><dd id="detail-stage-cost" class="mono cost-stage">--</dd></div>
+            <div><dt>Integrated Skills</dt><dd id="detail-skills" class="skills-list">--</dd></div>
             <div><dt>Started</dt><dd id="detail-started" class="mono">--</dd></div>
             <div><dt>Updated</dt><dd id="detail-updated" class="mono">--</dd></div>
             <div><dt>Activity</dt><dd id="detail-activity">--</dd></div>
             <div><dt>Result / blocker references</dt><dd id="detail-references" class="reference-list">--</dd></div>
           </dl>
-          <p class="detail-foot">The manifest remains the machine-readable authority. This panel reflects the read-only checklist.</p>
+          <p class="detail-foot">The manifest remains the machine-readable authority. This panel reflects the read-only checklist and execution telemetry.</p>
         </aside>
       </section>
 

@@ -34,6 +34,18 @@ Contract-grounded implementation engineer. You implement approved decisions; you
 
 Validate current acceptance and integrity under [orchestrator.md](orchestrator.md). An approved language alone is insufficient if the implementation also requires an unspecified framework, library API, data schema or error behavior.
 
+## Agent Skills Integration: Precision Planning & Generation
+
+To produce minimal, deterministic diffs and prevent unbounded code generation, Stage 03 integrates:
+
+### 1. `plan` Skill
+- **Surgical Implementation Planning**: Spawn a planning subagent (`plan`) to break requirements into fine-grained atomic file modifications before writing code.
+- **Diff Minimization**: Constrain generation strictly to files and functions identified in the implementation plan, avoiding sprawling edits or accidental refactoring of unrelated code.
+
+### 2. `codebase-memory` Verification
+- **Symbol & Reference Grounding**: Use codebase memory lookups to resolve exact imported types, class definitions, helper functions, and database models rather than inferring signatures.
+- **Targeted Scope Verification**: Verify caller sites and route handler registrations directly to ensure generated code integrates seamlessly into existing architecture.
+
 ## Outputs
 
 | Location / artifact | Contents |

@@ -35,6 +35,18 @@ Independent, read-only implementation reviewer. You diagnose and explain defects
 
 Validate all inputs under [orchestrator.md](orchestrator.md). Missing review policy or unavailable required source is a blocker, not permission to assume a risk tolerance or issue an unconditional approval.
 
+## Agent Skills Integration: Multi-Model Verification & Cross-Review
+
+To ensure high-fidelity audits, eliminate single-model hallucinations, and provide rigorous verification of critical components:
+
+### 1. `cross-review` Skill Integration
+- **Frontier Multi-Model Evaluation**: For complex or high-risk diffs (authorization logic, financial transactions, concurrency/locking, cryptography), spawn a cross-review subagent using an alternate model (e.g., Opus, Sonnet, or Gemini) to independently critique the implementation.
+- **Consensus & Deduplication**: Synthesize findings across reviewers. Discard ungrounded suggestions and consolidate overlapping issues into high-confidence entries in `review-findings.json`.
+- **Targeted Diff Review**: Pass only git diff chunks and contract boundaries to the review agent rather than full codebase files to maximize focus and minimize token cost.
+
+### 2. Static Analyzer Tooling Integration
+- **Pre-LLM Analysis**: Prior to invoking LLM-based reasoning, trigger local linters and static security scanners (`sonarqube_analyze_file`, ESLint, Ruff, Bandit, Semgrep) to catch deterministic quality flaws with zero token cost.
+
 ## Outputs
 
 Under `04-review/rNNNN/` produce:

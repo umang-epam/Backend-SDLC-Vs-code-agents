@@ -237,6 +237,20 @@ Structured stage artifacts and approvals must reference exact accepted revisions
 
 At each invocation persist `run_id`, `manifest_path`, `protocol_path`, `stage_id`, `revision`, `output_dir`, `input_artifacts`, and authorized repository references in an intake invocation file. The orchestrator passes exact files, not a summary that replaces them. Keep invocation-specific bindings outside the immutable prompt documents.
 
+## Agent Skills Dispatch & Integration
+
+The orchestrator authorizes and coordinates specialized agent skills across the SDLC pipeline to maximize code intelligence, minimize prompt tokens/costs, guarantee multi-model review rigor, and automate verification:
+
+| Stage / Area | Authorized Skills & Agents | Purpose & Optimization Effect |
+|---|---|---|
+| **01 Requirements** | `research` | Efficiently investigate domain patterns and architectural standards without inflating context. |
+| **02 Context Builder** | `codebase-memory` (`codebase-memory-scout`, `codebase-memory-auditor`), `research` | Query repository knowledge graph for callers/callees, symbol boundaries, and dependency fan-out instead of dumping raw files. Cuts input tokens by 60–80%. |
+| **03 Code Generation** | `plan`, `codebase-memory` | Formulate surgical, multi-file implementation blueprints and minimal AST diffs grounded in exact symbols. Prevents full-file rewrites. |
+| **04 Code Review** | `cross-review` (or `zen-review`), `sonarqube_analyze_file` | Run pre-LLM static analysis and linters for deterministic findings, then invoke multi-model cross-review on high-risk diffs (auth, crypto, concurrency) to eliminate single-model blindspots. |
+| **05 Test Case** | `Test Case Generator`, `codebase-memory` | Ground unit/integration test generation in verified call graphs and boundary conditions. |
+| **06 Postman** | `agent-browser` | Perform interactive smoke testing and live Swagger/OpenAPI UI validation against running test servers before freezing Collection v2.1 artifacts. |
+| **Monitor & Telemetry** | `codemie-html-report`, `frontend-design` | Render live execution waterfalls, token distributions, and cost economics in the `monitor/` dashboard. |
+
 ## Detailed System Prompt
 
 ```text

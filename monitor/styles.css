@@ -137,6 +137,45 @@ tbody td { padding: 12px 10px; color: var(--muted); font-size: 11px; white-space
 .reference-list { display: flex; flex-wrap: wrap; gap: 5px; }
 .reference-token { display: inline-block; max-width: 100%; padding: 2px 5px; border: 1px solid var(--line); background: #f3f6f4; color: #465552; font-family: var(--mono); font-size: 9px; overflow-wrap: anywhere; }
 .detail-foot { margin: 17px 0 0; color: var(--quiet); font-size: 10px; line-height: 1.5; }
+
+/* Telemetry & Metrics Styling */
+.telemetry-deck { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 14px; border: 1px solid var(--line-strong); background: var(--surface); }
+.telemetry-card { min-width: 0; padding: 14px 18px; border-right: 1px solid var(--line); }
+.telemetry-card:last-child { border-right: 0; }
+.telemetry-val { margin: 5px 0 3px; font-family: var(--display); font-size: 24px; font-weight: 500; line-height: 1.1; }
+.telemetry-sub { display: block; color: var(--quiet); font-family: var(--mono); font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.metric-highlight { color: var(--green); }
+.cost-value, .cost-cell, .cost-stage { color: var(--vermilion); font-weight: 500; }
+
+.waterfall-section { margin-top: 30px; padding: 0 2px; }
+.waterfall-legend { display: flex; align-items: center; gap: 14px; font-size: 10px; color: var(--muted); }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.legend-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.dot-duration { background: var(--vermilion); }
+.dot-tokens { background: #46605b; }
+.dot-cost { background: #d98a75; }
+
+.waterfall-chart { margin-top: 14px; border: 1px solid var(--line-strong); background: var(--surface); }
+.waterfall-empty { padding: 18px; color: var(--quiet); font-size: 11px; text-align: center; }
+.waterfall-row { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(140px, 2fr) minmax(170px, 1fr); align-items: center; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); cursor: pointer; transition: background .15s ease; }
+.waterfall-row:last-child { border-bottom: 0; }
+.waterfall-row:hover, .waterfall-row.is-selected { background: rgba(255, 255, 255, .75); }
+.waterfall-head { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.waterfall-code { font-family: var(--mono); font-size: 9px; color: var(--quiet); min-width: 16px; }
+.waterfall-tier { font-family: var(--mono); font-size: 8.5px; padding: 1px 4px; background: var(--slate-wash); border-radius: 2px; color: var(--muted); }
+.waterfall-bars { position: relative; height: 10px; background: #eef2f0; border-radius: 2px; overflow: hidden; }
+.waterfall-bar { height: 100%; border-radius: 2px; transition: width .3s ease; }
+.bar-duration { background: var(--vermilion); }
+.waterfall-bar.status-completed { background: var(--green); }
+.waterfall-bar.status-running { background: var(--vermilion); }
+.waterfall-bar.status-pending { background: #97a29f; }
+.waterfall-bar.status-blocked, .waterfall-bar.status-failed { background: #8e301e; }
+.waterfall-stats { display: flex; justify-content: flex-end; gap: 12px; font-size: 10px; color: var(--muted); white-space: nowrap; }
+.cost-tag { color: var(--vermilion); font-weight: 500; }
+
+.skills-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.skill-chip { display: inline-block; padding: 1px 5px; border: 1px solid #b2c9c2; background: var(--green-wash); color: var(--green); font-family: var(--mono); font-size: 8.5px; border-radius: 2px; }
+
 .page-foot { display: flex; justify-content: space-between; gap: 16px; margin-top: 25px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--quiet); font-family: var(--mono); font-size: 9px; }
 .page-foot > span:last-child { white-space: nowrap; }
 .page-foot i { display: inline-block; width: 5px; height: 5px; margin: 0 5px 1px; border-radius: 50%; background: var(--green); }
@@ -149,6 +188,10 @@ tbody td { padding: 12px 10px; color: var(--muted); font-size: 11px; white-space
   .summary-updated { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-top: 1px solid var(--line); }
   .summary-updated > strong { margin: 0; }
   .summary-updated .stale-label { text-align: right; }
+  .telemetry-deck { grid-template-columns: 1fr 1fr; }
+  .telemetry-deck > div:nth-child(2) { border-right: 0; }
+  .telemetry-deck > div:nth-child(3), .telemetry-deck > div:nth-child(4) { border-top: 1px solid var(--line); }
+  .waterfall-row { grid-template-columns: minmax(140px, 1fr) minmax(100px, 1.5fr) minmax(120px, 1fr); }
   .work-area { grid-template-columns: minmax(0, 1.3fr) minmax(240px, .8fr); gap: 18px; }
   .detail-panel { padding-left: 18px; }
 }
@@ -178,6 +221,11 @@ tbody td { padding: 12px 10px; color: var(--muted); font-size: 11px; white-space
   .summary-updated { grid-column: 1 / -1; grid-template-columns: 1fr auto; gap: 7px; border-top: 1px solid var(--line); }
   .summary-updated .eyebrow { grid-column: 1 / -1; }
   .summary-updated .stale-label { text-align: right; }
+  .telemetry-deck { grid-template-columns: 1fr; }
+  .telemetry-card { border-right: 0 !important; border-top: 1px solid var(--line); }
+  .telemetry-card:first-child { border-top: 0; }
+  .waterfall-row { grid-template-columns: 1fr; gap: 6px; }
+  .waterfall-stats { justify-content: flex-start; }
   .run-state { flex-wrap: wrap; gap: 7px; }
   .current-copy { margin-left: 0; }
   .pipeline-section { margin-top: 24px; }

@@ -159,12 +159,19 @@ async function readRuns(artifactRoot) {
     const runDirectory = path.join(artifactRoot, entry.name);
     let modifiedAt = null;
     let statusFileExists = false;
-    try {
-      const fileStat = await fs.stat(path.join(runDirectory, 'live-status.md'));
-      statusFileExists = fileStat.isFile();
-      if (statusFileExists) modifiedAt = fileStat.mtime.toISOString();
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
+    for (const filename of ['live-status.md', 'detailed-status.md', 'execution-metrics.json']) {
+      try {
+        const fileStat = await fs.stat(path.join(runDirectory, filename));
+        if (fileStat.isFile()) {
+          statusFileExists = true;
+          const mtimeIso = fileStat.mtime.toISOString();
+          if (!modifiedAt || mtimeIso > modifiedAt) {
+            modifiedAt = mtimeIso;
+          }
+        }
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
     }
     runs.push({ id: entry.name, statusFileExists, modifiedAt });
   }
@@ -186,28 +193,75 @@ async function readRun(artifactRoot, runId) {
 
   const runDirectory = path.join(realRoot, runId);
   const statusPath = path.join(runDirectory, 'live-status.md');
-  let realStatusPath;
+  const detailedStatusPath = path.join(runDirectory, 'detailed-status.md');
+  const metricsPath = path.join(runDirectory, 'execution-metrics.json');
+
+  let realStatusPath = null;
+  let statusMarkdown = '';
+  let statusFileStat = null;
+  let statusFileExists = false;
+
   try {
     realStatusPath = await fs.realpath(statusPath);
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      return { statusCode: 200, body: { runId, statusFileExists: false, error: 'This run has no live-status.md file.' } };
+    if (isWithinRoot(realRoot, realStatusPath)) {
+      [statusMarkdown, statusFileStat] = await Promise.all([
+        fs.readFile(realStatusPath, 'utf8'),
+        fs.stat(realStatusPath)
+      ]);
+      statusFileExists = true;
     }
-    throw error;
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
   }
 
-  if (!isWithinRoot(realRoot, realStatusPath)) {
-    return { statusCode: 403, body: { error: 'Status file resolves outside the configured artifact root.' } };
+  let metrics = null;
+  try {
+    const realMetricsPath = await fs.realpath(metricsPath);
+    if (isWithinRoot(realRoot, realMetricsPath)) {
+      const metricsRaw = await fs.readFile(realMetricsPath, 'utf8');
+      metrics = JSON.parse(metricsRaw);
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
   }
 
-  const [markdown, fileStat] = await Promise.all([fs.readFile(realStatusPath, 'utf8'), fs.stat(realStatusPath)]);
+  let detailedStatus = null;
+  try {
+    const realDetailedPath = await fs.realpath(detailedStatusPath);
+    if (isWithinRoot(realRoot, realDetailedPath)) {
+      detailedStatus = await fs.readFile(realDetailedPath, 'utf8');
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+
+  if (!statusFileExists && !metrics && !detailedStatus) {
+    return { statusCode: 200, body: { runId, statusFileExists: false, error: 'This run has no live-status.md or execution-metrics.json file.' } };
+  }
+
+  const parsed = statusFileExists ? parseStatus(statusMarkdown) : {
+    snapshot: {
+      runId,
+      status: metrics?.pipeline_status || 'unknown',
+      currentStage: 'null',
+      lastUpdated: new Date().toISOString(),
+      manifest: '',
+      latestHistoryEvent: ''
+    },
+    stages: [],
+    errors: [],
+    valid: true
+  };
+
   return {
     statusCode: 200,
     body: {
       runId,
-      statusFileExists: true,
-      fileModifiedAt: fileStat.mtime.toISOString(),
-      ...parseStatus(markdown),
+      statusFileExists,
+      fileModifiedAt: statusFileStat ? statusFileStat.mtime.toISOString() : new Date().toISOString(),
+      metrics,
+      detailedStatus,
+      ...parsed,
     },
   };
 }
