@@ -1,3 +1,4 @@
 /services/user-management/dist
 /services/user-management/node_modules
 services/user-management/.env
+/artifacts

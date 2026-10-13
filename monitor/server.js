@@ -1,5 +1,6 @@
 'use strict';
 
+const nodeFs = require('node:fs');
 const fs = require('node:fs/promises');
 const http = require('node:http');
 const path = require('node:path');
@@ -20,6 +21,39 @@ const STAGES = [
   '06-postman',
 ];
 const STATUSES = new Set(['pending', 'running', 'blocked', 'failed', 'completed']);
+
+const sseClients = new Set();
+let fileWatcher = null;
+let watcherDebounce = null;
+
+function broadcastUpdate(payload) {
+  const data = `data: ${JSON.stringify(payload || { type: 'change', timestamp: Date.now() })}\n\n`;
+  for (const client of sseClients) {
+    try {
+      client.write(data);
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+}
+
+function initWatcher(artifactRoot) {
+  if (fileWatcher) return;
+  try {
+    fileWatcher = nodeFs.watch(artifactRoot, { recursive: true }, (eventType, filename) => {
+      clearTimeout(watcherDebounce);
+      watcherDebounce = setTimeout(() => {
+        broadcastUpdate({ type: 'change', filename, timestamp: Date.now() });
+      }, 40);
+    });
+    fileWatcher.on('error', () => {
+      fileWatcher = null;
+    });
+  } catch (err) {
+    // Artifact root path might not exist yet or be inaccessible; watcher will retry when ready.
+    fileWatcher = null;
+  }
+}
 
 function parseOptions(args) {
   let artifactsArgument;
@@ -165,7 +199,7 @@ async function readRuns(artifactRoot) {
     const runDirectory = path.join(artifactRoot, entry.name);
     let modifiedAt = null;
     let statusFileExists = false;
-    for (const filename of ['live-status.md', 'detailed-status.md', 'execution-metrics.json']) {
+    for (const filename of ['live-status.md', 'detailed-status.md', 'execution-metrics.json', 'manifest.json']) {
       try {
         const fileStat = await fs.stat(path.join(runDirectory, filename));
         if (fileStat.isFile()) {
@@ -186,6 +220,29 @@ async function readRuns(artifactRoot) {
   return { artifactRoot, rootExists: true, runs };
 }
 
+async function discoverStageResults(runDirectory) {
+  const stageResults = {};
+  for (const stageId of STAGES) {
+    const stageDir = path.join(runDirectory, stageId);
+    try {
+      const entries = await fs.readdir(stageDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name === 'stage-result.json') {
+          const raw = await fs.readFile(path.join(stageDir, entry.name), 'utf8');
+          stageResults[stageId] = JSON.parse(raw);
+        } else if (entry.isDirectory()) {
+          const nestedPath = path.join(stageDir, entry.name, 'stage-result.json');
+          try {
+            const raw = await fs.readFile(nestedPath, 'utf8');
+            stageResults[stageId] = JSON.parse(raw);
+          } catch {}
+        }
+      }
+    } catch {}
+  }
+  return stageResults;
+}
+
 async function readRun(artifactRoot, runId) {
   if (!safeRunId(runId)) return { statusCode: 400, body: { error: 'Invalid run ID.' } };
 
@@ -201,6 +258,7 @@ async function readRun(artifactRoot, runId) {
   const statusPath = path.join(runDirectory, 'live-status.md');
   const detailedStatusPath = path.join(runDirectory, 'detailed-status.md');
   const metricsPath = path.join(runDirectory, 'execution-metrics.json');
+  const manifestPath = path.join(runDirectory, 'manifest.json');
 
   let realStatusPath = null;
   let statusMarkdown = '';
@@ -241,20 +299,50 @@ async function readRun(artifactRoot, runId) {
     if (error.code !== 'ENOENT') throw error;
   }
 
-  if (!statusFileExists && !metrics && !detailedStatus) {
+  let manifest = null;
+  try {
+    const realManifestPath = await fs.realpath(manifestPath);
+    if (isWithinRoot(realRoot, realManifestPath)) {
+      const manifestRaw = await fs.readFile(realManifestPath, 'utf8');
+      manifest = JSON.parse(manifestRaw);
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
+  }
+
+  const stageResults = await discoverStageResults(runDirectory);
+
+  if (!statusFileExists && !metrics && !detailedStatus && !manifest && Object.keys(stageResults).length === 0) {
     return { statusCode: 200, body: { runId, statusFileExists: false, error: 'This run has no live-status.md or execution-metrics.json file.' } };
   }
 
   const parsed = statusFileExists ? parseStatus(statusMarkdown) : {
     snapshot: {
       runId,
-      status: metrics?.pipeline_status || 'unknown',
-      currentStage: 'null',
+      status: metrics?.status || manifest?.status || 'running',
+      currentStage: manifest?.current_stage || STAGES[0],
       lastUpdated: new Date().toISOString(),
-      manifest: '',
+      manifest: manifest ? 'manifest.json' : '',
       latestHistoryEvent: ''
     },
-    stages: [],
+    stages: STAGES.map((id) => {
+      const res = stageResults[id];
+      let gateStatus = '-';
+      if (res) {
+        gateStatus = res.gate_passed ? 'PASS' : 'FAIL';
+      }
+      return {
+        id,
+        agent: id.replace(/^\d\d-/, '').replaceAll('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase()) + ' Agent',
+        status: res ? res.status : 'pending',
+        revision: res ? `r000${res.revision || 1}` : 'r0001',
+        startedAt: res ? res.timestamp : '',
+        updatedAt: res ? res.timestamp : '',
+        gate: gateStatus,
+        references: '-',
+        activity: res ? res.summary : 'Pending orchestration',
+      };
+    }),
     errors: [],
     valid: true
   };
@@ -263,16 +351,20 @@ async function readRun(artifactRoot, runId) {
     statusCode: 200,
     body: {
       runId,
-      statusFileExists,
+      statusFileExists: statusFileExists || Boolean(manifest) || Boolean(metrics),
       fileModifiedAt: statusFileStat ? statusFileStat.mtime.toISOString() : new Date().toISOString(),
       metrics,
+      stageResults,
       detailedStatus,
+      manifest,
       ...parsed,
     },
   };
 }
 
 function createServer(artifactRoot) {
+  initWatcher(artifactRoot);
+
   return http.createServer(async (request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
@@ -288,6 +380,21 @@ function createServer(artifactRoot) {
 
     if (request.method !== 'GET') {
       sendError(response, 405, 'Only GET requests are supported.');
+      return;
+    }
+
+    if (requestUrl.pathname === '/api/events') {
+      response.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+      });
+      response.write(': connected\n\n');
+      sseClients.add(response);
+      request.on('close', () => {
+        sseClients.delete(response);
+      });
       return;
     }
 

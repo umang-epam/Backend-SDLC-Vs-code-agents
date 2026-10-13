@@ -59,13 +59,15 @@ Stage agents own their revision directories and authorized output files in the t
 
 1. Validate intake, configuration, write scopes, decision authority, and gate policy. Persist missing information before attempting a stage.
 2. Create a unique run root and manifest. Register supplied approvals without inventing their values or authority.
-3. Invoke Requirement, Context Builder, Code Generation, Code Review, Test Case, then Postman, exactly in that order. Only one invocation is active at a time.
-4. Supply the stage system prompt, this protocol's path, run manifest path, allocated revision directory, accepted input references, and relevant repository roots. Do not supply chat history as authoritative input.
-5. Validate returned artifacts: parseability, required fields, run/stage/revision identity, path scope, declared ownership, referenced approvals, input freshness, output existence, and actual verification evidence.
-6. Accept a revision only when `status` is `completed`, its gate is `pass` or a valid `approved_exception`, and every required deliverable exists. Record its actual hash or permitted integrity exception before advancing.
-7. On `blocked` or `failed`, persist the result and stop downstream invocation. Route missing decisions to their authorized owner and defects to the producing stage. A result without a valid gate is not success.
-8. Retry only after a recorded resolution and authorization. Allocate a new revision; never overwrite accepted history. If an upstream revision or tracked source changes, invalidate all later stage acceptances and rerun the sequence from the earliest affected owner.
-9. Complete only after all six stages have accepted current revisions. Aggregate limitations and approved exceptions; do not describe a waived or unexecuted check as passed.
+3. Compute input artifact checksums via `StageCacheManager` (from `lib/cache-manager.js`). If upstream artifacts, source code, and policies are unchanged from a previously accepted revision, leverage the cached stage artifact and skip redundant LLM invocations.
+4. For active stage invocations, construct prompts using `PromptCacheBuilder` with static-first ordering and ephemeral prompt cache breakpoints after system rules and `Docs/openapi.yaml`.
+5. Invoke Requirement, Context Builder, Code Generation, Code Review, Test Case, then Postman, sequentially in order.
+6. Supply the stage system prompt, this protocol's path, run manifest path, allocated revision directory, accepted input references, and relevant repository roots.
+7. Validate returned artifacts: parseability, required fields, run/stage/revision identity, path scope, declared ownership, referenced approvals, input freshness, output existence, and actual verification evidence.
+8. Accept a revision only when `status` is `completed`, its gate is `pass` or a valid `approved_exception`, and every required deliverable exists. Persist the stage cache fingerprint and update `execution-metrics.json` with cache hit rate and token savings.
+9. On `blocked` or `failed`, persist the result and stop downstream invocation. Route missing decisions to their authorized owner and defects to the producing stage.
+10. Retry only after a recorded resolution and authorization. If an upstream revision changes, invalidate downstream cache fingerprints and rerun from the earliest affected owner.
+11. Complete only after all six stages have accepted current revisions. Compute aggregate cost and token savings in `execution-metrics.json` and generate `completion-report.md`.
 
 ## Interactive Clarification
 
@@ -73,11 +75,24 @@ When an ambiguity, contradiction, or missing fact affects the current stage or i
 
 Treat an answer as clarification of user-provided intent only within the user's authority. For decisions requiring a configured business, technical, security, or other approver, ask the authorized owner or request their approval; do not convert a user clarification into formal approval. Persist the answer and its source/respondent, timestamp, affected IDs, and any required approval reference in the appropriate intake, decision, or resolution record; update the open question/blocker and run history before resuming. If authority remains uncertain, keep the run blocked and ask who can decide.
 
-## Live Agent Status Checklist
+## Live Agent Status Checklist & Real-Time Monitor Synchronization
 
-Initialize `live-status.md` from [live-agent-status-checklist.md](live-agent-status-checklist.md) for each run. The manifest is the machine-readable source of truth; update this checklist in the same orchestration event whenever a stage status, current stage, allocated revision, accepted result, blocker, or invalidation changes. Record a UTC timestamp and link the evidence for every status change. Do not claim an agent is running unless its invocation was actually started, or completed unless its result was validated and accepted. If the checklist and manifest disagree, stop advancement and reconcile them against immutable history.
+Initialize `live-status.md` from [live-agent-status-checklist.md](live-agent-status-checklist.md) and `detailed-status.md` from [detailed-pipeline-status.md](detailed-pipeline-status.md) immediately upon run initialization. The manifest is the machine-readable source of truth; update these files in real-time at every agent transition so the live monitor reflects instantaneous pipeline state:
 
-During an active invocation, refresh the current stage's `updated_at` and concise activity note when a meaningful checkpoint or blocker occurs; do not invent progress updates. On blocked or failed status, mark the run accordingly, record blocker/result references, and leave all downstream stages pending or invalidated. On acceptance, record the accepted revision and gate before marking the next stage running. On completion, verify all six current revisions and final limitations before marking the run completed.
+1. **Before Agent Invocation (Stage Start)**:
+   - Mark the current stage status as `running` and overall pipeline status as `running` in `live-status.md` and `detailed-status.md`.
+   - Record `started_at` UTC timestamp and write to disk immediately prior to launching the stage agent.
+2. **Upon Agent Completion (Stage Finish)**:
+   - Validate and accept the stage's `stage-result.json` and gate record.
+   - Update `live-status.md`, `detailed-status.md`, and `execution-metrics.json` with the stage's execution time, token metrics, cost breakdown, and gate pass status.
+   - Append the stage completion event in `history/` and update `manifest.json`.
+   - Only after all artifacts are persisted on disk, proceed to invoke the next stage.
+3. **On Blocker / Failure**:
+   - Mark the current stage and pipeline as `blocked` or `failed` in `live-status.md` and `detailed-status.md`, record the blocker/result references, and keep downstream stages as `pending`.
+4. **On Final Run Completion**:
+   - Verify all six accepted revisions, update `execution-metrics.json` totals, mark overall status as `completed`, and generate `completion-report.md`.
+
+Do not batch status writes at the end of the entire pipeline. Refreshing status at each stage transition guarantees live visibility in the UI monitor.
 
 ## Rules / Constraints
 

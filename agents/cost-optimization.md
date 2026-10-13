@@ -62,6 +62,7 @@ Major LLM providers (Anthropic Claude, OpenAI, Google Gemini) offer prompt cachi
    ```
 2. **Explicit Cache Breakpoints**: Place cache control markers (`cache_control: {"type": "ephemeral"}`) after large static documents (`Docs/openapi.yaml` and agent protocol files).
 3. **Cross-Stage Cache Reuse**: Standardizing the first 2,048+ tokens across all 6 agent invocations ensures that subsequent stages hit cached prompt memory from earlier stages within the 5-minute cache TTL.
+4. **Programmatic Caching Engine**: Use the centralized caching manager in `lib/cache-manager.js` (`PromptCacheBuilder`, `StageCacheManager`, `ToolResultCache`, `CacheTelemetry`) to automate prompt breakpoint insertion, stage checksum evaluation, and telemetry tracking.
 
 ---
 

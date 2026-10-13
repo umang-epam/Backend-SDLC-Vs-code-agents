@@ -20,6 +20,15 @@ const STAGE_DEFAULT_SKILLS = {
   '06-postman': ['agent-browser'],
 };
 
+const STAGE_MODEL_MAPPING = {
+  '01-requirements': { tier: 'Tier 1 (Frontier)', model: 'Gemini 2.5 Pro / Claude 3.7 Sonnet' },
+  '02-context': { tier: 'Tier 1 (Frontier)', model: 'Gemini 2.5 Pro / Claude 3.7 Sonnet' },
+  '03-generation': { tier: 'Tier 1 (Frontier)', model: 'Gemini 2.5 Pro / Claude 3.7 Sonnet' },
+  '04-review': { tier: 'Tier 1 (Frontier)', model: 'Gemini 2.5 Pro / Claude 3.7 Sonnet' },
+  '05-tests': { tier: 'Tier 2 (Fast)', model: 'Gemini 2.5 Flash / Claude 3.5 Haiku' },
+  '06-postman': { tier: 'Tier 2 (Fast)', model: 'Gemini 2.5 Flash / Claude 3.5 Haiku' },
+};
+
 const elements = {
   select: document.querySelector('#run-select'),
   connection: document.querySelector('#connection'),
@@ -262,12 +271,16 @@ function showStage(stage) {
   }
 
   const stageMetric = getStageMetric(stage.id);
+  const mapping = STAGE_MODEL_MAPPING[stage.id] || { tier: 'Tier 1 (Frontier)', model: 'Frontier LLM' };
 
   elements.detailNumber.textContent = stageIndex(stage.id);
   elements.detailTitle.textContent = stage.agent || STAGE_LABELS[stage.id] || stage.id;
   setChip(elements.detailStatus, stage.status);
   elements.detailRevision.textContent = `REV ${stage.revision || '--'}`;
   elements.detailGate.textContent = stage.gate || '--';
+
+  const summary = getTelemetrySummary(latestStatus?.metrics);
+  const totalAgentTime = summary?.total_agent_execution_seconds || 0;
 
   if (stageMetric) {
     const duration = stageMetric.execution_seconds ?? stageMetric.duration_seconds;
@@ -278,13 +291,23 @@ function showStage(stage) {
     const promptCombined = (inputTokens || 0) + (cachedTokens || 0);
     const cacheHitRate = stageMetric.cache_hit_rate_pct ?? (promptCombined ? Math.round((cachedTokens / promptCombined) * 100) : 0);
 
-    elements.detailModel.textContent = `${stageMetric.model_tier || 'Default'} (${stageMetric.model_id || 'Gemini 3.7 Flash'})`;
-    elements.detailStageDuration.textContent = `${formatSeconds(duration)} (${stageMetric.duration_pct ? stageMetric.duration_pct + '%' : 'runtime'})`;
+    const modelTier = stageMetric.model_tier || mapping.tier;
+    const modelId = stageMetric.model_id || mapping.model;
+    elements.detailModel.textContent = `${modelTier} (${modelId})`;
+
+    let durationSuffix = '';
+    if (stageMetric.duration_pct) {
+      durationSuffix = ` (${stageMetric.duration_pct}%)`;
+    } else if (duration && totalAgentTime > 0) {
+      const pct = Math.round((duration / totalAgentTime) * 100);
+      durationSuffix = ` (${pct}% of agent time)`;
+    }
+    elements.detailStageDuration.textContent = `${formatSeconds(duration)}${durationSuffix}`;
     elements.detailStageTokens.textContent = `${formatTokens(stageMetric.total_tokens)} (Prompt: ${formatTokens(inputTokens)} | Cached: ${formatTokens(cachedTokens)} | Out: ${formatTokens(outputTokens)})`;
     elements.detailStageCost.textContent = `${formatCost(cost)} (Cache Hit: ${cacheHitRate}%)`;
     setSkills(stage.id, stageMetric.skills_used);
   } else {
-    elements.detailModel.textContent = 'Configured in Orchestrator';
+    elements.detailModel.textContent = `${mapping.tier} (${mapping.model})`;
     elements.detailStageDuration.textContent = '--';
     elements.detailStageTokens.textContent = '--';
     elements.detailStageCost.textContent = '--';
@@ -299,13 +322,17 @@ function showStage(stage) {
 
 function getTelemetrySummary(metrics) {
   if (!metrics) return null;
-  if (metrics.summary) return metrics.summary;
-  if (metrics.totals) {
+  let summary = null;
+  if (metrics.summary) {
+    summary = { ...metrics.summary };
+  } else if (metrics.totals) {
     const t = metrics.totals;
     const prompt = t.prompt_tokens || 0;
     const cache = t.cache_read_tokens || 0;
     const promptCombined = prompt + cache;
-    return {
+    const totalCost = t.cost_usd ?? t.total_cost_usd ?? 0;
+    const cacheSavings = t.prompt_cache_savings_usd ?? 0;
+    summary = {
       total_wall_clock_seconds: t.wall_clock_seconds ?? t.wall_clock_duration_seconds ?? 0,
       total_agent_execution_seconds: t.agent_execution_seconds ?? t.cumulative_agent_duration_seconds ?? 0,
       total_tokens: t.total_tokens ?? 0,
@@ -313,19 +340,20 @@ function getTelemetrySummary(metrics) {
       total_output_tokens: t.completion_tokens || 0,
       prompt_cache_hit_rate_pct: promptCombined ? (cache / promptCombined) * 100 : 0,
       total_cached_tokens: cache,
-      total_cost_usd: t.cost_usd ?? t.total_cost_usd ?? 0,
-      cost_savings_usd: 0,
+      total_cost_usd: totalCost,
+      cost_savings_usd: cacheSavings,
       cost_savings_pct: 0,
     };
-  }
-  if (metrics.timing_summary || metrics.token_summary || metrics.cost_summary) {
+  } else if (metrics.timing_summary || metrics.token_summary || metrics.cost_summary) {
     const timing = metrics.timing_summary || {};
     const tokens = metrics.token_summary || {};
     const cost = metrics.cost_summary || {};
     const prompt = tokens.total_prompt_tokens || 0;
     const cache = tokens.total_cache_read_tokens || 0;
     const promptCombined = prompt + cache;
-    return {
+    const totalCost = cost.total_pipeline_cost_usd ?? cost.total_cost_usd ?? 0;
+    const cacheSavings = cost.total_prompt_cache_savings_usd ?? 0;
+    summary = {
       total_wall_clock_seconds: timing.wall_clock_duration_seconds || 0,
       total_agent_execution_seconds: timing.cumulative_agent_duration_seconds || 0,
       total_tokens: tokens.total_pipeline_tokens ?? tokens.total_tokens ?? 0,
@@ -333,12 +361,23 @@ function getTelemetrySummary(metrics) {
       total_output_tokens: tokens.total_completion_tokens || 0,
       prompt_cache_hit_rate_pct: promptCombined ? (cache / promptCombined) * 100 : 0,
       total_cached_tokens: cache,
-      total_cost_usd: cost.total_pipeline_cost_usd ?? cost.total_cost_usd ?? 0,
-      cost_savings_usd: 0,
+      total_cost_usd: totalCost,
+      cost_savings_usd: cacheSavings,
       cost_savings_pct: 0,
     };
   }
-  return null;
+
+  if (summary) {
+    if ((!summary.cost_savings_usd || summary.cost_savings_usd === 0) && summary.total_cached_tokens > 0) {
+      summary.cost_savings_usd = summary.total_cached_tokens * 0.00000125;
+    }
+    const fullCost = summary.total_cost_usd + (summary.cost_savings_usd || 0);
+    if (fullCost > 0 && summary.cost_savings_usd > 0) {
+      summary.cost_savings_pct = (summary.cost_savings_usd / fullCost) * 100;
+    }
+  }
+
+  return summary;
 }
 
 function renderTelemetry(metrics, stages) {
@@ -530,6 +569,36 @@ function updateRunSelect(runs) {
   elements.select.value = selectedRun;
 }
 
+let liveEventSource = null;
+let currentPollTimer = null;
+let activeRunStatus = 'idle';
+
+function scheduleNextPoll() {
+  if (currentPollTimer) clearTimeout(currentPollTimer);
+  const interval = (activeRunStatus === 'running' || activeRunStatus === 'pending') ? 1200 : 5000;
+  currentPollTimer = setTimeout(async () => {
+    await poll();
+    scheduleNextPoll();
+  }, interval);
+}
+
+function initSse() {
+  if (typeof EventSource === 'undefined') return;
+  if (liveEventSource) {
+    try { liveEventSource.close(); } catch {}
+  }
+  liveEventSource = new EventSource('/api/events');
+  liveEventSource.onopen = () => {
+    setConnection('connected', 'Live');
+  };
+  liveEventSource.onmessage = () => {
+    void poll();
+  };
+  liveEventSource.onerror = () => {
+    // Fallback polling continues automatically
+  };
+}
+
 async function poll() {
   if (polling) return;
   polling = true;
@@ -544,17 +613,20 @@ async function poll() {
 
     if (index.error) throw new Error(index.error);
     if (!selectedRun) {
+      activeRunStatus = 'idle';
       renderEmpty(index.artifactRoot, index.runs?.length ? 'No run selected' : elements.emptyRoot.textContent);
-      setConnection('connected', 'Connected');
+      setConnection('connected', liveEventSource?.readyState === 1 ? 'Live' : 'Connected');
     } else {
       const status = await getJson(`/api/runs/${encodeURIComponent(selectedRun)}`);
       status.artifactRoot = index.artifactRoot;
       if (!status.statusFileExists) {
+        activeRunStatus = 'idle';
         renderEmpty(index.artifactRoot, `${selectedRun} has no live-status.md file yet.`);
-        setConnection('connected', 'Connected');
+        setConnection('connected', liveEventSource?.readyState === 1 ? 'Live' : 'Connected');
       } else {
+        activeRunStatus = status.snapshot?.status || status.metrics?.pipeline_status || status.status || 'idle';
         renderStatus(status);
-        setConnection('connected', 'Connected');
+        setConnection('connected', liveEventSource?.readyState === 1 ? 'Live' : 'Connected');
       }
     }
     elements.syncCopy.textContent = `Last sync ${displayTime(new Date().toISOString(), true)}`;
@@ -576,5 +648,6 @@ elements.select.addEventListener('change', () => {
   void poll();
 });
 
+initSse();
 await poll();
-window.setInterval(() => void poll(), POLL_MS);
+scheduleNextPoll();
