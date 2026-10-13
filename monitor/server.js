@@ -44,13 +44,12 @@ function initWatcher(artifactRoot) {
       clearTimeout(watcherDebounce);
       watcherDebounce = setTimeout(() => {
         broadcastUpdate({ type: 'change', filename, timestamp: Date.now() });
-      }, 40);
+      }, 100);
     });
     fileWatcher.on('error', () => {
       fileWatcher = null;
     });
   } catch (err) {
-    // Artifact root path might not exist yet or be inaccessible; watcher will retry when ready.
     fileWatcher = null;
   }
 }
@@ -199,7 +198,7 @@ async function readRuns(artifactRoot) {
     const runDirectory = path.join(artifactRoot, entry.name);
     let modifiedAt = null;
     let statusFileExists = false;
-    for (const filename of ['live-status.md', 'detailed-status.md', 'execution-metrics.json', 'manifest.json']) {
+    for (const filename of ['live-status.md', 'detailed-status.md', 'execution-metrics.json']) {
       try {
         const fileStat = await fs.stat(path.join(runDirectory, filename));
         if (fileStat.isFile()) {
@@ -220,29 +219,6 @@ async function readRuns(artifactRoot) {
   return { artifactRoot, rootExists: true, runs };
 }
 
-async function discoverStageResults(runDirectory) {
-  const stageResults = {};
-  for (const stageId of STAGES) {
-    const stageDir = path.join(runDirectory, stageId);
-    try {
-      const entries = await fs.readdir(stageDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isFile() && entry.name === 'stage-result.json') {
-          const raw = await fs.readFile(path.join(stageDir, entry.name), 'utf8');
-          stageResults[stageId] = JSON.parse(raw);
-        } else if (entry.isDirectory()) {
-          const nestedPath = path.join(stageDir, entry.name, 'stage-result.json');
-          try {
-            const raw = await fs.readFile(nestedPath, 'utf8');
-            stageResults[stageId] = JSON.parse(raw);
-          } catch {}
-        }
-      }
-    } catch {}
-  }
-  return stageResults;
-}
-
 async function readRun(artifactRoot, runId) {
   if (!safeRunId(runId)) return { statusCode: 400, body: { error: 'Invalid run ID.' } };
 
@@ -258,7 +234,6 @@ async function readRun(artifactRoot, runId) {
   const statusPath = path.join(runDirectory, 'live-status.md');
   const detailedStatusPath = path.join(runDirectory, 'detailed-status.md');
   const metricsPath = path.join(runDirectory, 'execution-metrics.json');
-  const manifestPath = path.join(runDirectory, 'manifest.json');
 
   let realStatusPath = null;
   let statusMarkdown = '';
@@ -299,50 +274,20 @@ async function readRun(artifactRoot, runId) {
     if (error.code !== 'ENOENT') throw error;
   }
 
-  let manifest = null;
-  try {
-    const realManifestPath = await fs.realpath(manifestPath);
-    if (isWithinRoot(realRoot, realManifestPath)) {
-      const manifestRaw = await fs.readFile(realManifestPath, 'utf8');
-      manifest = JSON.parse(manifestRaw);
-    }
-  } catch (error) {
-    if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
-  }
-
-  const stageResults = await discoverStageResults(runDirectory);
-
-  if (!statusFileExists && !metrics && !detailedStatus && !manifest && Object.keys(stageResults).length === 0) {
+  if (!statusFileExists && !metrics && !detailedStatus) {
     return { statusCode: 200, body: { runId, statusFileExists: false, error: 'This run has no live-status.md or execution-metrics.json file.' } };
   }
 
   const parsed = statusFileExists ? parseStatus(statusMarkdown) : {
     snapshot: {
       runId,
-      status: metrics?.status || manifest?.status || 'running',
-      currentStage: manifest?.current_stage || STAGES[0],
+      status: metrics?.pipeline_status || 'unknown',
+      currentStage: 'null',
       lastUpdated: new Date().toISOString(),
-      manifest: manifest ? 'manifest.json' : '',
+      manifest: '',
       latestHistoryEvent: ''
     },
-    stages: STAGES.map((id) => {
-      const res = stageResults[id];
-      let gateStatus = '-';
-      if (res) {
-        gateStatus = res.gate_passed ? 'PASS' : 'FAIL';
-      }
-      return {
-        id,
-        agent: id.replace(/^\d\d-/, '').replaceAll('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase()) + ' Agent',
-        status: res ? res.status : 'pending',
-        revision: res ? `r000${res.revision || 1}` : 'r0001',
-        startedAt: res ? res.timestamp : '',
-        updatedAt: res ? res.timestamp : '',
-        gate: gateStatus,
-        references: '-',
-        activity: res ? res.summary : 'Pending orchestration',
-      };
-    }),
+    stages: [],
     errors: [],
     valid: true
   };
@@ -351,12 +296,10 @@ async function readRun(artifactRoot, runId) {
     statusCode: 200,
     body: {
       runId,
-      statusFileExists: statusFileExists || Boolean(manifest) || Boolean(metrics),
+      statusFileExists,
       fileModifiedAt: statusFileStat ? statusFileStat.mtime.toISOString() : new Date().toISOString(),
       metrics,
-      stageResults,
       detailedStatus,
-      manifest,
       ...parsed,
     },
   };
