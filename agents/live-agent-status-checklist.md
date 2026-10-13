@@ -29,6 +29,8 @@ Use only `pending`, `running`, `blocked`, `failed`, or `completed` for stage sta
 
 ### Before Starting
 
+- [ ] Jira ticket fetched (`intake/jira-ticket-*.json` / `.md`) with summary, description, and acceptance criteria.
+- [ ] Tech stack explicitly asked and confirmed with user just after Jira ticket pull; saved to `decisions/DEC-001-tech-stack.json` and `intake/tech-stack.json`.
 - [ ] Intake, run configuration, write scopes, decision authority, and gate policy are persisted and validated.
 - [ ] Run ID and artifact root are unique; manifest and initial history are created.
 - [ ] Shared OpenAPI baseline is pinned as provisional schema context, not treated as an approved API contract.

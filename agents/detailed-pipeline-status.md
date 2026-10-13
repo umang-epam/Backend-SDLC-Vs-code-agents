@@ -9,6 +9,8 @@ Initialize one copy at `artifacts/<run-id>/detailed-status.md` and a machine-rea
 | Metric / Attribute | Value |
 |---|---|
 | **Run ID** | `example-run-20261012-001` |
+| **Jira Ticket Reference** | `intake/jira-ticket-PROJ-123.json` |
+| **Confirmed Tech Stack** | `decisions/DEC-001-tech-stack.json` |
 | **Pipeline Status** | `pending` \| `running` \| `blocked` \| `failed` \| `completed` |
 | **Current Stage** | `01-requirements` \| `02-context` \| `03-generation` \| `04-review` \| `05-tests` \| `06-postman` \| `null` |
 | **Active Revision** | `r0001` |

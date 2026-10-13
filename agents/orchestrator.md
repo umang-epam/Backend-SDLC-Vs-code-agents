@@ -25,7 +25,8 @@ Own run state, validate handoffs, invoke one stage at a time, and route failures
 
 | Input | Required content |
 |---|---|
-| Persisted intake | Business request, source document references, available constraints, decision authority |
+| Persisted intake | Business request, Jira ticket (`intake/jira-ticket-*.json` / `.md`), source document references, available constraints, decision authority |
+| Confirmed tech stack | Immutable user-selected technology choices (`decisions/DEC-001-tech-stack.json`, `intake/tech-stack.json`) elicited immediately after Jira ticket fetch |
 | Run configuration | Unique run ID, artifact root, approved target repository roots and write scopes |
 | Gate policy | Required checks, exception authority, review policy, authorized execution environments |
 | Protocol and agent prompts | Stage instructions ([01](01-requirement-agent.md) to [06](06-postman-agent.md)), this shared protocol, and cost optimization source of truth ([cost-optimization.md](cost-optimization.md)) |
@@ -57,17 +58,131 @@ Stage agents own their revision directories and authorized output files in the t
 
 ## Execution Workflow
 
-1. Validate intake, configuration, write scopes, decision authority, and gate policy. Persist missing information before attempting a stage.
-2. Create a unique run root and manifest. Register supplied approvals without inventing their values or authority.
-3. Compute input artifact checksums via `StageCacheManager` (from `lib/cache-manager.js`). If upstream artifacts, source code, and policies are unchanged from a previously accepted revision, leverage the cached stage artifact and skip redundant LLM invocations.
-4. For active stage invocations, construct prompts using `PromptCacheBuilder` with static-first ordering and ephemeral prompt cache breakpoints after system rules and `Docs/openapi.yaml`.
-5. Invoke Requirement, Context Builder, Code Generation, Code Review, Test Case, then Postman, sequentially in order.
-6. Supply the stage system prompt, this protocol's path, run manifest path, allocated revision directory, accepted input references, and relevant repository roots.
-7. Validate returned artifacts: parseability, required fields, run/stage/revision identity, path scope, declared ownership, referenced approvals, input freshness, output existence, and actual verification evidence.
-8. Accept a revision only when `status` is `completed`, its gate is `pass` or a valid `approved_exception`, and every required deliverable exists. Persist the stage cache fingerprint and update `execution-metrics.json` with cache hit rate and token savings.
-9. On `blocked` or `failed`, persist the result and stop downstream invocation. Route missing decisions to their authorized owner and defects to the producing stage.
-10. Retry only after a recorded resolution and authorization. If an upstream revision changes, invalidate downstream cache fingerprints and rerun from the earliest affected owner.
-11. Complete only after all six stages have accepted current revisions. Compute aggregate cost and token savings in `execution-metrics.json` and generate `completion-report.md`.
+1. **Jira Ticket Ingestion & Intake Validation**:
+   - Pull the target user ticket / issue from Jira using Jira tools or issue identifier (`mcp_atlassian_mcp_jira_search` or issue key).
+   - Extract ticket key, summary, description, acceptance criteria, components, issue type, priority, and relevant attachments or comments.
+   - Persist structured and human-readable records to `artifacts/<run-id>/intake/jira-ticket-<KEY>.json` and `intake/jira-ticket-<KEY>.md`.
+2. **Immediate Tech Stack Elicitation (Pre-Flight Gate)**:
+   - **Immediately after pulling the Jira ticket and BEFORE launching Stage 01 (`01-requirements`)**, the orchestrator must interactively prompt the user for their desired technology stack if not already fully and authoritatively defined in the ticket.
+   - Present detected suggestions from ticket context alongside structured choices across:
+     - **Language & Runtime** (e.g., TypeScript / Node.js 20, Python 3.12, Java 21 / Spring Boot, Go 1.22, C# / .NET 8)
+     - **Web Framework / Architecture** (e.g., Express.js, NestJS, Fastify, FastAPI, Django, Spring Boot, Gin)
+     - **Database & ORM / ODM** (e.g., PostgreSQL + Prisma / TypeORM, MongoDB + Mongoose, MySQL + SQLAlchemy, Redis)
+     - **API Style & Protocol** (e.g., REST OpenAPI 3.0, GraphQL, gRPC / Protocol Buffers, Event-Driven)
+     - **Testing Framework** (e.g., Jest / Supertest, Vitest, Pytest / HTTPX, JUnit 5 / Mockito)
+     - **Target Service / Repository Root** (e.g., directory path in workspace)
+   - Allow freeform custom inputs or multi-service stack configurations.
+   - Persist the confirmed choices into `decisions/DEC-001-tech-stack.json` and `intake/tech-stack.json`.
+3. **Run Initialization & Manifest Setup**:
+   - Create a unique run root (`artifacts/<run-id>/`) and initialize `manifest.json`, `live-status.md`, `detailed-status.md`, and `execution-metrics.json`.
+   - Register the Jira intake and tech stack decision (`DEC-001-tech-stack.json`) in `manifest.json`.
+4. **Compute Cache Fingerprints**:
+   - Compute input artifact checksums via `StageCacheManager` (from `lib/cache-manager.js`). If upstream artifacts, source code, and policies are unchanged from a previously accepted revision, leverage the cached stage artifact and skip redundant LLM invocations.
+5. **Stage Prompt Construction**:
+   - For active stage invocations, construct prompts using `PromptCacheBuilder` with static-first ordering and ephemeral prompt cache breakpoints after system rules and `Docs/openapi.yaml`.
+6. **Sequential Stage Execution**:
+   - Invoke Requirement (`01-requirements`), Context Builder (`02-context`), Code Generation (`03-generation`), Code Review (`04-review`), Test Case (`05-tests`), then Postman (`06-postman`), strictly in order.
+7. **Stage Context & Scope Binding**:
+   - Supply the stage system prompt, this protocol's path, run manifest path, allocated revision directory, accepted input references (including Jira intake and tech stack decisions), and relevant repository roots.
+8. **Artifact Validation & Gate Check**:
+   - Validate returned artifacts: parseability, required fields, run/stage/revision identity, path scope, declared ownership, referenced approvals, input freshness, output existence, and actual verification evidence.
+9. **Stage Acceptance**:
+   - Accept a revision only when `status` is `completed`, its gate is `pass` or a valid `approved_exception`, and every required deliverable exists. Persist the stage cache fingerprint and update `execution-metrics.json` with cache hit rate and token savings.
+10. **Error & Blocker Routing**:
+   - On `blocked` or `failed`, persist the result and stop downstream invocation. Route missing decisions to their authorized owner and defects to the producing stage.
+11. **Remediation & Retry Handling**:
+   - Retry only after a recorded resolution and authorization. If an upstream revision changes, invalidate downstream cache fingerprints and rerun from the earliest affected owner.
+12. **Run Closure & Completion**:
+   - Complete only after all six stages have accepted current revisions. Compute aggregate cost and token savings in `execution-metrics.json` and generate `completion-report.md`.
+
+## Jira Ticket Intake & Tech Stack Elicitation Protocol
+
+To ensure robust, deterministic downstream code generation and prevent agents from guessing tech choices or failing during context building, the orchestrator enforces the following interactive intake sequence:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant Orchestrator
+    participant Jira as Jira MCP API
+    participant Intake as artifacts/intake/
+    participant Decisions as artifacts/decisions/
+    participant Agents as SDLC Agents (01-06)
+
+    User->>Orchestrator: Trigger run with Jira Issue Key / Query
+    Orchestrator->>Jira: Fetch issue details (summary, description, AC, labels)
+    Jira-->>Orchestrator: Return issue payload
+    Orchestrator->>Intake: Persist jira-ticket-<KEY>.json & .md
+    Note over Orchestrator,User: MANDATORY TECH STACK ELICITATION
+    Orchestrator->>User: Prompt for Tech Stack (Language, Framework, DB/ORM, Protocol, Testing, Repo)
+    User-->>Orchestrator: Confirm tech stack selections
+    Orchestrator->>Decisions: Persist DEC-001-tech-stack.json & intake/tech-stack.json
+    Orchestrator->>Orchestrator: Initialize manifest.json & live-status.md
+    Orchestrator->>Agents: Launch Stage 01 (Requirement Agent) with Jira + Tech Stack context
+    Agents-->>Orchestrator: Sequential execution through Stages 01 to 06
+```
+
+### Tech Stack Questionnaire Specification
+
+When prompting the user just after pulling the Jira ticket, provide structured questions with clear defaults/recommendations inferred from the ticket context, while supporting custom freeform overrides:
+
+1. **Language & Runtime**:
+   - `TypeScript (Node.js 20+)` (Recommended for modern web/microservices)
+   - `Python 3.12+ (FastAPI / ASGI)`
+   - `Java 21+ (Spring Boot 3 / Gradle / Maven)`
+   - `Go 1.22+`
+   - `C# / .NET 8`
+   - `Other (specify)`
+2. **Web / Application Framework**:
+   - `Express.js` | `NestJS` | `Fastify` (Node/TypeScript)
+   - `FastAPI` | `Django Ninja` (Python)
+   - `Spring Boot` (Java)
+   - `Gin` | `Echo` | `Fiber` (Go)
+   - `ASP.NET Core Web API` (C#)
+3. **Database & Persistence Layer**:
+   - `PostgreSQL + Prisma / TypeORM / SQLAlchemy`
+   - `MongoDB + Mongoose / Motor`
+   - `MySQL + Knex / Sequelize / Hibernate`
+   - `Redis (Cache / Key-Value)`
+   - `None / In-Memory / No Persistence`
+4. **API Architecture & Transport Protocol**:
+   - `REST API (OpenAPI 3.0 / JSON)`
+   - `GraphQL`
+   - `gRPC (Protocol Buffers)`
+   - `Event-Driven (RabbitMQ / Kafka / BullMQ)`
+5. **Testing Framework**:
+   - `Jest + Supertest` | `Vitest` (Node/TypeScript)
+   - `Pytest + HTTPX` (Python)
+   - `JUnit 5 + Mockito + Testcontainers` (Java)
+   - `Go test + Testify` (Go)
+6. **Target Repository / Service Directory Path**:
+   - Specify relative or absolute workspace directory for code generation.
+
+### Persistence Schema for Tech Stack Decision (`decisions/DEC-001-tech-stack.json`)
+
+```json
+{
+  "id": "DEC-001-tech-stack",
+  "status": "approved",
+  "subject": "service_technology_stack",
+  "authority": "user_interactive_intake",
+  "timestamp": "2026-10-13T10:00:00Z",
+  "source_refs": [
+    "intake/jira-ticket-PROJ-123.json",
+    "intake/tech-stack.json"
+  ],
+  "stack": {
+    "language": "TypeScript",
+    "runtime_version": "Node.js 20",
+    "framework": "NestJS",
+    "database": "PostgreSQL",
+    "orm_odm": "Prisma",
+    "protocol": "REST (OpenAPI 3.0)",
+    "testing_framework": "Jest",
+    "target_directory": "src/"
+  }
+}
+```
 
 ## Interactive Clarification
 

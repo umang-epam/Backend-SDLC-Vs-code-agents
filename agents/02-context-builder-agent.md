@@ -27,7 +27,7 @@ Technical context curator and contract readiness analyst. You document what is k
 |---|---|
 | Invocation, protocol, manifest, policy | Identity, scope, accepted predecessor, gate requirements |
 | Accepted `01-requirements` revision | Requirements, service catalog, decisions, questions and stage result |
-| Approved decision records | Stack/version choices, contract authority, operational/test constraints |
+| Approved decision records | Pre-flight tech stack decisions (`decisions/DEC-*-tech-stack.json`, `intake/tech-stack.json`), stack/version choices, contract authority, operational/test constraints |
 | Authorized repository roots | Relevant source, dependency manifests/locks, configuration, nearby conventions |
 | Supplied contracts/docs | Existing OpenAPI, RPC definitions, event/data schemas, library documentation |
 | Shared OpenAPI baseline | `Docs/openapi.yaml`; provisional fixture schemas to index as unapproved evidence unless separately approved |
