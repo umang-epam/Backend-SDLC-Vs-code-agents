@@ -17,7 +17,8 @@ const STAGES = [
   '03-generation',
   '04-review',
   '05-tests',
-  '06-postman',
+  '06-test-execution',
+  '07-acceptance',
 ];
 const STATUSES = new Set(['pending', 'running', 'blocked', 'failed', 'completed']);
 
@@ -163,7 +164,7 @@ async function readRuns(artifactRoot) {
       try {
         const fileStat = await fs.stat(path.join(runDirectory, filename));
         if (fileStat.isFile()) {
-          statusFileExists = true;
+          if (filename === 'live-status.md') statusFileExists = true;
           const mtimeIso = fileStat.mtime.toISOString();
           if (!modifiedAt || mtimeIso > modifiedAt) {
             modifiedAt = mtimeIso;
@@ -214,15 +215,28 @@ async function readRun(artifactRoot, runId) {
     if (error.code !== 'ENOENT') throw error;
   }
 
+  const readErrors = [];
   let metrics = null;
   try {
     const realMetricsPath = await fs.realpath(metricsPath);
     if (isWithinRoot(realRoot, realMetricsPath)) {
       const metricsRaw = await fs.readFile(realMetricsPath, 'utf8');
       metrics = JSON.parse(metricsRaw);
+      if (!metrics || typeof metrics !== 'object' || Array.isArray(metrics)
+        || metrics.run_id !== runId
+        || !metrics.summary || typeof metrics.summary !== 'object' || Array.isArray(metrics.summary)
+        || !Array.isArray(metrics.stages)
+        || metrics.stages.some((stage) => !stage || !STAGES.includes(stage.stage_id))) {
+        readErrors.push('execution-metrics.json has an invalid shape, stage ID or run identity.');
+        metrics = null;
+      }
     }
   } catch (error) {
-    if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
+    if (error instanceof SyntaxError) {
+      readErrors.push(`Malformed execution-metrics.json: ${error.message}`);
+    } else if (error.code !== 'ENOENT') {
+      throw error;
+    }
   }
 
   let detailedStatus = null;
@@ -235,30 +249,31 @@ async function readRun(artifactRoot, runId) {
     if (error.code !== 'ENOENT') throw error;
   }
 
-  if (!statusFileExists && !metrics && !detailedStatus) {
-    return { statusCode: 200, body: { runId, statusFileExists: false, error: 'This run has no live-status.md or execution-metrics.json file.' } };
-  }
-
   const parsed = statusFileExists ? parseStatus(statusMarkdown) : {
     snapshot: {
       runId,
       status: metrics?.pipeline_status || 'unknown',
       currentStage: 'null',
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: '',
       manifest: '',
       latestHistoryEvent: ''
     },
     stages: [],
-    errors: [],
-    valid: true
+    errors: ['This run has no live-status.md file.'],
+    valid: false
   };
+  if (statusFileExists && parsed.snapshot.runId !== runId) {
+    parsed.errors.push('live-status.md Run ID does not match the selected run.');
+  }
+  parsed.errors.push(...readErrors);
+  parsed.valid = parsed.errors.length === 0;
 
   return {
     statusCode: 200,
     body: {
       runId,
       statusFileExists,
-      fileModifiedAt: statusFileStat ? statusFileStat.mtime.toISOString() : new Date().toISOString(),
+      fileModifiedAt: statusFileStat ? statusFileStat.mtime.toISOString() : null,
       metrics,
       detailedStatus,
       ...parsed,

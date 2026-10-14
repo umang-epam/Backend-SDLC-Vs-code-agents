@@ -7,17 +7,9 @@ const STAGE_LABELS = {
   '02-context': 'Context',
   '03-generation': 'Generation',
   '04-review': 'Review',
-  '05-tests': 'Tests',
-  '06-postman': 'Postman',
-};
-
-const STAGE_DEFAULT_SKILLS = {
-  '01-requirements': ['research'],
-  '02-context': ['codebase-memory', 'research'],
-  '03-generation': ['plan', 'codebase-memory'],
-  '04-review': ['cross-review', 'sonarqube_analyze_file'],
-  '05-tests': ['codebase-memory', 'Test Case Generator'],
-  '06-postman': ['agent-browser'],
+  '05-tests': 'Test Cases',
+  '06-test-execution': 'Test Execution',
+  '07-acceptance': 'Acceptance',
 };
 
 const elements = {
@@ -71,6 +63,7 @@ let selectedRun = '';
 let selectedStage = '';
 let latestStatus = null;
 let polling = false;
+let pollRequested = false;
 
 function setConnection(mode, label) {
   elements.connection.classList.toggle('is-connected', mode === 'connected');
@@ -164,8 +157,7 @@ function formatCost(num) {
 
 function getStageMetric(stageId) {
   if (!latestStatus?.metrics?.stages) return null;
-  const num = stageIndex(stageId);
-  return latestStatus.metrics.stages.find((s) => s.stage_id === stageId || s.stage_id?.startsWith(num)) || null;
+  return latestStatus.metrics.stages.find((s) => s.stage_id === stageId) || null;
 }
 
 function buildRows(stages) {
@@ -205,10 +197,9 @@ function buildRows(stages) {
   }
 }
 
-function setSkills(stageId, customSkills) {
+function setSkills(skills) {
   elements.detailSkills.replaceChildren();
-  const skills = customSkills?.length ? customSkills : (STAGE_DEFAULT_SKILLS[stageId] || []);
-  if (!skills.length) {
+  if (!Array.isArray(skills) || skills.length === 0) {
     elements.detailSkills.textContent = '--';
     return;
   }
@@ -241,7 +232,7 @@ function showStage(stage) {
     elements.detailStarted.textContent = '--';
     elements.detailUpdated.textContent = '--';
     elements.detailActivity.textContent = '--';
-    setSkills('', []);
+    setSkills([]);
     setReferences('');
     return;
   }
@@ -255,17 +246,18 @@ function showStage(stage) {
   elements.detailGate.textContent = stage.gate || '--';
 
   if (stageMetric) {
-    elements.detailModel.textContent = `${stageMetric.model_tier || 'Default'} (${stageMetric.model_id || 'Gemini 3.7 Flash'})`;
+    elements.detailModel.textContent = `${stageMetric.model_tier || '--'} (${stageMetric.model_id || '--'})`;
     elements.detailStageDuration.textContent = `${formatSeconds(stageMetric.execution_seconds)} (${stageMetric.duration_pct ? stageMetric.duration_pct + '%' : 'runtime'})`;
-    elements.detailStageTokens.textContent = `${formatTokens(stageMetric.total_tokens)} (Prompt: ${formatTokens(stageMetric.input_tokens)} | Cached: ${formatTokens(stageMetric.cached_tokens || 0)} | Out: ${formatTokens(stageMetric.output_tokens)})`;
-    elements.detailStageCost.textContent = `${formatCost(stageMetric.cost_usd)} (Cache Hit: ${stageMetric.cache_hit_rate_pct || 0}%)`;
-    setSkills(stage.id, stageMetric.skills_used);
+    elements.detailStageTokens.textContent = `${formatTokens(stageMetric.total_tokens)} (Prompt: ${formatTokens(stageMetric.input_tokens)} | Cached: ${formatTokens(stageMetric.cached_tokens)} | Out: ${formatTokens(stageMetric.output_tokens)})`;
+    const cacheHitRate = Number.isFinite(stageMetric.cache_hit_rate_pct) ? `${stageMetric.cache_hit_rate_pct}%` : '--';
+    elements.detailStageCost.textContent = `${formatCost(stageMetric.cost_usd)} (Cache Hit: ${cacheHitRate})`;
+    setSkills(stageMetric.skills_used);
   } else {
-    elements.detailModel.textContent = 'Configured in Orchestrator';
+    elements.detailModel.textContent = 'Not recorded';
     elements.detailStageDuration.textContent = '--';
     elements.detailStageTokens.textContent = '--';
     elements.detailStageCost.textContent = '--';
-    setSkills(stage.id, STAGE_DEFAULT_SKILLS[stage.id]);
+    setSkills([]);
   }
 
   elements.detailStarted.textContent = displayTime(stage.startedAt);
@@ -283,7 +275,7 @@ function renderTelemetry(metrics, stages) {
     elements.metricCacheHit.textContent = '--';
     elements.metricCacheSub.textContent = 'Cached Reads: --';
     elements.metricCost.textContent = '--';
-    elements.metricCostSavings.textContent = 'Optimization Savings: --';
+    elements.metricCostSavings.textContent = 'Measured savings: --';
     renderWaterfallFallback(stages);
     return;
   }
@@ -295,12 +287,15 @@ function renderTelemetry(metrics, stages) {
   elements.metricTokens.textContent = formatTokens(s.total_tokens);
   elements.metricTokensSub.textContent = `Prompt: ${formatTokens(s.total_input_tokens)} | Out: ${formatTokens(s.total_output_tokens)}`;
 
-  elements.metricCacheHit.textContent = `${s.prompt_cache_hit_rate_pct?.toFixed(1) || '0.0'}%`;
+  elements.metricCacheHit.textContent = Number.isFinite(s.prompt_cache_hit_rate_pct)
+    ? `${s.prompt_cache_hit_rate_pct.toFixed(1)}%`
+    : '--';
   elements.metricCacheSub.textContent = `Cached Reads: ${formatTokens(s.total_cached_tokens)}`;
 
   elements.metricCost.textContent = formatCost(s.total_cost_usd);
-  const savingsPct = s.cost_savings_pct ? `${s.cost_savings_pct.toFixed(0)}%` : '--';
-  elements.metricCostSavings.textContent = `Savings: ${formatCost(s.cost_savings_usd || 0)} (${savingsPct})`;
+  const savings = Number.isFinite(s.cost_savings_usd) ? formatCost(s.cost_savings_usd) : '--';
+  const savingsPct = Number.isFinite(s.cost_savings_pct) ? `${s.cost_savings_pct.toFixed(0)}%` : '--';
+  elements.metricCostSavings.textContent = `Measured savings: ${savings} (${savingsPct})`;
 
   renderWaterfall(metrics.stages || [], s.total_agent_execution_seconds, s.total_cost_usd);
 }
@@ -321,7 +316,7 @@ function renderWaterfall(stageMetrics, totalDuration, totalCost) {
 
     const head = document.createElement('div');
     head.className = 'waterfall-head';
-    head.innerHTML = `<span class="waterfall-code">${stageIndex(m.stage_id)}</span><strong>${STAGE_LABELS[m.stage_id] || m.stage_name || m.stage_id}</strong><span class="waterfall-tier">${m.model_tier || 'Fast'}</span>`;
+    head.innerHTML = `<span class="waterfall-code">${stageIndex(m.stage_id)}</span><strong>${STAGE_LABELS[m.stage_id] || m.stage_name || m.stage_id}</strong><span class="waterfall-tier">${m.model_tier || '--'}</span>`;
 
     const barArea = document.createElement('div');
     barArea.className = 'waterfall-bars';
@@ -388,7 +383,7 @@ function renderStatus(status) {
   const currentId = status.snapshot?.currentStage;
   elements.currentStage.textContent = currentId === 'null' ? 'No active stage' : (STAGE_LABELS[currentId] || currentId || '--');
   const stages = status.stages || [];
-  elements.completedCount.innerHTML = `${stages.filter((stage) => stage.status === 'completed').length} <small>/ 6</small>`;
+  elements.completedCount.innerHTML = `${stages.filter((stage) => stage.status === 'completed').length} <small>/ ${Object.keys(STAGE_LABELS).length}</small>`;
   elements.attentionCount.textContent = String(stages.filter((stage) => stage.status === 'blocked' || stage.status === 'failed').length);
   elements.lastUpdated.textContent = displayTime(status.snapshot?.lastUpdated, true);
   elements.fileUpdated.textContent = `FILE MTIME ${displayTime(status.fileModifiedAt, true)}`;
@@ -409,7 +404,7 @@ function renderStatus(status) {
   }
 
   if (status.valid === false) {
-    setNotice(`Malformed live-status.md: ${status.errors.join(' ')}`);
+    setNotice(`Status data issues: ${status.errors.join(' ')}`);
   } else {
     setNotice('');
   }
@@ -457,16 +452,26 @@ function updateRunSelect(runs) {
   }
   elements.select.disabled = false;
   selectedRun = runs.some((run) => run.id === previousRun) ? previousRun : runs[0].id;
+  if (selectedRun !== previousRun) selectedStage = '';
   elements.select.value = selectedRun;
 }
 
 async function poll() {
-  if (polling) return;
+  if (polling) {
+    pollRequested = true;
+    return;
+  }
   polling = true;
+  const runAtStart = selectedRun;
+  let requestedRun = runAtStart;
   elements.refresh.disabled = true;
   elements.syncCopy.textContent = 'Synchronizing artifact files';
   try {
     const index = await getJson('/api/runs');
+    if (selectedRun !== runAtStart) {
+      pollRequested = true;
+      return;
+    }
     updateRunSelect(index.runs || []);
     elements.emptyRoot.textContent = index.rootExists
       ? `Artifact root is present: ${index.artifactRoot}`
@@ -477,10 +482,16 @@ async function poll() {
       renderEmpty(index.artifactRoot, index.runs?.length ? 'No run selected' : elements.emptyRoot.textContent);
       setConnection('connected', 'Connected');
     } else {
-      const status = await getJson(`/api/runs/${encodeURIComponent(selectedRun)}`);
+      requestedRun = selectedRun;
+      const status = await getJson(`/api/runs/${encodeURIComponent(requestedRun)}`);
+      if (selectedRun !== requestedRun) {
+        pollRequested = true;
+        return;
+      }
       status.artifactRoot = index.artifactRoot;
       if (!status.statusFileExists) {
         renderEmpty(index.artifactRoot, `${selectedRun} has no live-status.md file yet.`);
+        if (status.valid === false) setNotice(status.errors.join(' '));
         setConnection('connected', 'Connected');
       } else {
         renderStatus(status);
@@ -489,13 +500,21 @@ async function poll() {
     }
     elements.syncCopy.textContent = `Last sync ${displayTime(new Date().toISOString(), true)}`;
   } catch (error) {
+    if (selectedRun !== requestedRun) {
+      pollRequested = true;
+      return;
+    }
     setConnection('error', 'Disconnected');
     elements.syncCopy.textContent = `Sync failed ${displayTime(new Date().toISOString(), true)}`;
-    setNotice(error.message);
     if (!selectedRun) renderEmpty('', 'The local monitor could not read its artifact root.');
+    setNotice(error.message);
   } finally {
     polling = false;
     elements.refresh.disabled = false;
+    if (pollRequested) {
+      pollRequested = false;
+      void poll();
+    }
   }
 }
 
