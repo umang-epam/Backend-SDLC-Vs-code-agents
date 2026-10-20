@@ -102,67 +102,6 @@ function main() {
   };
   fs.writeFileSync(path.join(runRoot, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
-  const liveStatusRows = STAGES.map(([id, agent]) => `| ${id} | ${agent} | pending | - | - | - | - | - | - |`).join('\n');
-  const liveStatus = `# Pipeline Run Status
-
-## Run Snapshot
-- Run ID: ${runId}
-- Overall status: pending
-- Current stage: null
-- Last updated (UTC): ${nowIso()}
-- Manifest: manifest.json
-- Latest history event: -
-
-## Stage Status
-| Stage | Agent | Status | Revision | Started (UTC) | Updated (UTC) | Gate | Result / blocker references | Activity |
-|---|---|---|---|---|---|---|---|---|
-${liveStatusRows}
-`;
-  fs.writeFileSync(path.join(runRoot, 'live-status.md'), liveStatus);
-
-  const detailedStatus = `# Detailed Pipeline Status
-- Run ID: ${runId}
-- Overall status: pending
-- Last event ID: -
-- Last updated (UTC): ${nowIso()}
-- Manifest: manifest.json
-- Next management action: Validate intake, policy and approvals, then dispatch 01-requirements, owner: orchestrator
-`;
-  fs.writeFileSync(path.join(runRoot, 'detailed-status.md'), detailedStatus);
-
-  const executionMetrics = {
-    schema_version: '1.0',
-    run_id: runId,
-    pipeline_status: 'pending',
-    summary: {
-      total_wall_clock_seconds: null,
-      total_agent_execution_seconds: null,
-      total_tokens: null,
-      total_input_tokens: null,
-      total_output_tokens: null,
-      total_cached_tokens: null,
-      prompt_cache_hit_rate_pct: null,
-      total_cost_usd: null,
-      cost_savings_usd: null,
-      cost_savings_pct: null,
-    },
-    stages: STAGES.map(([stageId]) => ({
-      stage_id: stageId,
-      model_id: null,
-      model_tier: null,
-      execution_seconds: null,
-      input_tokens: null,
-      output_tokens: null,
-      cached_tokens: null,
-      total_tokens: null,
-      cost_usd: null,
-      cache_hit_rate_pct: null,
-      duration_pct: null,
-      skills_used: [],
-    })),
-  };
-  fs.writeFileSync(path.join(runRoot, 'execution-metrics.json'), JSON.stringify(executionMetrics, null, 2));
-
   console.log(`Initialized run at ${runRoot}`);
 }
 

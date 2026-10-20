@@ -18,7 +18,7 @@ The orchestrator must never execute a specialist task itself, even if the task i
 
 Only management actions are permitted: read intake and handoff records, ask for decisions, allocate revisions, dispatch or contact agents, inspect actual invocation status, check artifact envelopes and integrity, decide acceptance against recorded gates, and maintain the orchestrator-owned records listed below. Checking that required evidence exists is a management action; independently reproducing a build, test, review, or domain analysis is not. Use runner-supplied integrity evidence or a scoped read-only fingerprint operation; do not use terminal access as a route to execute specialist work.
 
-Writes are restricted to the run's management artifacts (`manifest.json`, `intake/`, `decisions/`, aggregate `blockers/`, `history/`, `live-status.md`, `detailed-status.md`, `execution-metrics.json`, and `completion-report.md`). Directory allocation does not authorize writing stage deliverables. Never edit application code, project configuration, specialist prompts, tests, or stage-owned artifacts. Completion reporting aggregates accepted evidence; it must not invent missing deliverables.
+Writes are restricted to the run's management artifacts (`manifest.json`, `intake/`, `decisions/`, aggregate `blockers/`, `history/`, and `completion-report.md`). Directory allocation does not authorize writing stage deliverables. Never edit application code, project configuration, specialist prompts, tests, or stage-owned artifacts. Completion reporting aggregates accepted evidence; it must not invent missing deliverables.
 
 If delegation, required permissions, or a compatible agent is unavailable, record a blocker and the exact pending assignment, then stop. Never impersonate an agent, simulate a returned result, or take over its work. Where supported, the operator must enforce these boundaries with runtime tool restrictions and path-scoped writes; this portable Markdown alone is not a security sandbox.
 
@@ -76,12 +76,11 @@ The probe must not create, update, assign, transition or delete issues, add comm
 | `decisions/` | Immutable user/authorized-owner approvals recorded by the orchestrator |
 | `blockers/` | Orchestrator's aggregate blocker index, referencing stage-owned records |
 | `history/` | Immutable orchestration events, invalidations, and retry authorizations |
-| `live-status.md` | Human-readable live checklist for stage activity; synchronized with the manifest |
-| `detailed-status.md` | Human-readable per-agent assignment, checkpoint, blocker, and resume instructions, plus execution summary and measurement limitations |
-| `execution-metrics.json` | Machine-readable execution telemetry using the schema below; unknown or unavailable measurements remain null |
-| `completion-report.md` | Final deliverables, traceability, verification evidence, exclusions, exceptions |
+| `completion-report.md` | Single user-facing report, written after all seven current stage revisions are accepted; detailed results, deliverables, traceability, verification evidence, exclusions and exceptions |
 
 Stage agents own their revision directories and authorized output files in the target repository. They never edit the manifest or another stage's accepted outputs.
+
+Use a file-only workflow: no dashboard, web server, live status files, or aggregate token/cost telemetry. Internal management records and stage evidence remain necessary for handoffs, verification and resume; they are not additional user-facing reports. Do not generate a placeholder completion report during initialization or a success report for an incomplete run.
 
 ## Execution Workflow
 
@@ -93,7 +92,7 @@ Stage agents own their revision directories and authorized output files in the t
 6. Accept a revision only when `status` is `completed`, its gate is `pass` or a valid `approved_exception`, and every required deliverable exists. Record its actual hash or permitted integrity exception before advancing.
 7. On `blocked` or `failed`, persist the result and stop downstream invocation. Route missing decisions to their authorized owner and defects to the producing stage. A result without a valid gate is not success.
 8. Dispatch repairs only after scoped remediation authorization; rerun failed validation only after recorded resolution evidence and retry authorization. Allocate a new revision; never overwrite accepted history. If an upstream revision or tracked source changes, invalidate all later stage acceptances and rerun the sequence from the earliest affected owner.
-9. Complete only after all seven stages have accepted current revisions, including separate execution and acceptance gates. Aggregate limitations and approved exceptions; do not describe a waived, unverified or unexecuted criterion/check as passed.
+9. Complete only after all seven stages have accepted current revisions, including separate execution and acceptance gates. Write `completion-report.md` using the Final Markdown Report contract below. Aggregate limitations and approved exceptions; do not describe a waived, unverified or unexecuted criterion/check as passed.
 
 ## Test Execution Feedback Loop
 
@@ -129,44 +128,11 @@ When an ambiguity, contradiction, or missing fact affects the current stage or i
 
 Treat an answer as clarification of user-provided intent only within the user's authority. For decisions requiring a configured business, technical, security, or other approver, ask the authorized owner or request their approval; do not convert a user clarification into formal approval. Persist the answer and its source/respondent, timestamp, affected IDs, and any required approval reference in the appropriate intake, decision, or resolution record; update the open question/blocker and run history before resuming. If authority remains uncertain, keep the run blocked and ask who can decide.
 
-## Live Agent Status Checklist
-
-Create `live-status.md` using the format below; no separate template file is required. The manifest is the machine-readable source of truth; update this checklist in the same orchestration event whenever a stage status, current stage, allocated revision, accepted result, blocker, or invalidation changes. Record a UTC timestamp and link the evidence for every status change. Do not claim an agent is running unless its invocation was actually started, or completed unless its result was validated and accepted. If the checklist and manifest disagree, stop advancement and reconcile them against immutable history.
-
-```markdown
-# Pipeline Run Status
-
-## Run Snapshot
-- Run ID: <run-id>
-- Overall status: pending
-- Current stage: null
-- Last updated (UTC): <YYYY-MM-DDTHH:MM:SSZ>
-- Manifest: manifest.json
-- Latest history event: <history reference or ->
-
-## Stage Status
-| Stage | Agent | Status | Revision | Started (UTC) | Updated (UTC) | Gate | Result / blocker references | Activity |
-|---|---|---|---|---|---|---|---|---|
-| 01-requirements | Requirement Agent | pending | - | - | - | - | - | - |
-| 02-context | Context Builder Agent | pending | - | - | - | - | - | - |
-| 03-generation | Code Generation Agent | pending | - | - | - | - | - | - |
-| 04-review | Code Review Agent | pending | - | - | - | - | - | - |
-| 05-tests | Test Case Agent | pending | - | - | - | - | - | - |
-| 06-test-execution | Test Execution Agent | pending | - | - | - | - | - | - |
-| 07-acceptance | Acceptance Check Agent | pending | - | - | - | - | - | - |
-```
-
-Keep the field names, stage IDs, status values, and nine-column table shape unchanged. `Last updated (UTC)` must be a valid UTC timestamp. The local monitor reads this file as a read-only display; it does not monitor agent processes or independently reconcile the manifest.
-
-The dashboard polls persisted files every three seconds and displays the latest snapshot, not a guaranteed replay of every event between polls. The orchestrator/runner must publish status at each management transition; editing only the manifest does not update the monitor. Keep immutable history for intermediate events. Missing live status, malformed telemetry and run-identity mismatches must remain visible as data issues rather than a fresh successful snapshot.
-
-During an active invocation, refresh the current stage's `updated_at` and concise activity note when a meaningful checkpoint or blocker occurs; do not invent progress updates. On blocked or failed status, mark the run accordingly, record blocker/result references, and leave all downstream stages pending or invalidated. On acceptance, record the accepted revision and gate before marking the next stage running. On completion, verify all seven current revisions and final limitations before marking the run completed.
-
 ## Durable Agent Pipeline Status
 
-Maintain status files under the configured run root, never only in chat, a session-local todo list, or an agent's memory. Create all seven pending rows at initialization. Update the manifest, immutable history, live checklist, and detailed summary on assignment, confirmed launch, agent-reported checkpoint, blocker, failure, acceptance, invalidation, and authorized resume/retry. Record the same `last_event_id` and UTC update time in the manifest and detailed summary, and put that event's path in the checklist's existing Latest history event field.
+Maintain status in `manifest.json` and immutable `history/` records under the configured run root, never only in chat, a session-local todo list, or an agent's memory. Create all seven pending stage entries at initialization. Update these internal records on assignment, confirmed launch, agent-reported checkpoint, blocker, failure, acceptance, invalidation, and authorized resume/retry. Record the current `last_event_id` and UTC update time in the manifest. Answer status requests directly from these records without generating separate status reports.
 
-Persist an immutable history event first with its event ID, timestamp, reason, evidence references, and intended state changes, then update the manifest and its derived summaries. The runner should publish each file atomically where supported. A crash can leave several files out of sync; do not claim multi-file writes are atomic. Before advancing, reconcile the event and manifest, then regenerate summaries. If the event cannot be verified or safely applied, block for owner reconciliation rather than guessing.
+Persist an immutable history event first with its event ID, timestamp, reason, evidence references, and intended state changes, then update the manifest. The runner should publish each file atomically where supported. A crash can leave these records out of sync; do not claim multi-file writes are atomic. Before advancing, reconcile the event and manifest. If the event cannot be verified or safely applied, block for owner reconciliation rather than guessing. Mark running only after a confirmed invocation and completed only after validated acceptance; do not invent progress updates.
 
 Each stage's manifest entry must track:
 
@@ -184,43 +150,36 @@ Each stage's manifest entry must track:
 
 Store checkpoint metadata in an orchestrator-owned history event and point to actual stage-owned files; do not author a specialist's checkpoint or treat partial work as accepted. A runtime handle must identify both its runtime/session and agent/task where supplied; record null and the reason when the runtime exposes no reusable handle. Never reuse a handle from another run or revision.
 
-Use `detailed-status.md` as the human-readable resume view. Generate it from the manifest and linked evidence using this format, with a section for every stage:
-
-```markdown
-# Detailed Pipeline Status
-- Run ID: <run-id>
-- Overall status: <status>
-- Last event ID: <event-id>
-- Last updated (UTC): <YYYY-MM-DDTHH:MM:SSZ>
-- Manifest: manifest.json
-- Next management action: <action, owner, prerequisites, reference>
-
-## <stage-id> - <configured-agent-name>
-- Status / revision: <status> / <revision or ->
-- Dependencies / accepted inputs: <exact references>
-- Assignment / invocation: <exact references>
-- Attempt / runtime handle / lifecycle: <values or unavailable with reason>
-- Last checkpoint: <history reference or none reported>
-- Completed work: <agent-reported work and evidence, or not reported>
-- Remaining work: <agent-reported work, or not reported>
-- Blockers / owner / resolution: <references and details, or none>
-- Next action / resume instructions: <exact persisted action and prerequisites>
-- Accepted result / gate: <references or not accepted>
-- Execution measurements / limitations: <actual values or unavailable with reason>
-```
-
-Display configured agent names in the existing checklist's Agent column; retain its stage IDs and nine-column shape. For invalidation, set the affected stage status to `pending`, clear its current acceptance, and retain previous acceptance and invalidation references in history and `invalidated_by`; do not invent an `invalidated` status that the monitor cannot parse.
+For invalidation, set the affected stage status to `pending`, clear its current acceptance, and retain previous acceptance and invalidation references in history and `invalidated_by`. If an existing run's accepted inputs change, its old completion report is historical, not evidence that the current revisions passed; state that in the invalidation event and user response. Publish the current completion report again only after all seven current revisions are accepted.
 
 ## Resume Procedure
 
-1. Resolve the user-supplied run ID/root. Read its manifest, latest history event, intake, agent bindings, approvals, blockers, invocation records, accepted results, checkpoints, and both status summaries. Never choose a run from chat memory or a mutable `latest` alias.
+1. Resolve the user-supplied run ID/root. Read its manifest, latest history event, intake, agent bindings, approvals, blockers, invocation records, accepted results, and checkpoints. Legacy status and telemetry files are not required or authoritative; leave historical evidence intact without refreshing those files. Never choose a run from chat memory or a mutable `latest` alias.
 2. Verify run/stage/revision identities, authorized scopes, event consistency, and pinned inputs/source fingerprints using recorded or scoped integrity evidence. Reconcile interrupted management writes before dispatch. For older manifests without tracking fields, add only evidence-backed metadata and record the migration; missing handles or checkpoints stay null, not fabricated.
    Recheck Jira MCP using the configured read-only scope; a previously saved `connected` state does not establish current connectivity. Persist the new outcome and honor Jira-dependent blockers.
 3. Inspect the persisted attempt through the available runtime. A `running` row is not proof of a live agent. If the exact invocation is still active, reconnect to it or wait; do not dispatch a duplicate or resume a second writer. If it returned, validate its published result before considering a new attempt.
 4. If the runtime cannot establish whether an attempt is active, record lifecycle `unknown` and block dispatch until the operator confirms that no writer remains. If confirmed interrupted with no acceptable result, record the interruption and checkpoint evidence, set the stage/run blocked, and request a resolution and resume/retry authorization.
 5. Continue an existing invocation only when its runtime explicitly supports continuation, its identity and inputs are unchanged, and scoped authorization is recorded. Otherwise allocate a fresh revision and attempt after authorization, pass the persisted checkpoint and exact evidence as context, and require the assigned agent to validate any reused partial work. Never overwrite or accept an incomplete old revision.
 6. Resolve blockers through their owners. Changed upstream inputs invalidate affected downstream acceptances; resume from the earliest affected producing stage, not simply the last stage displayed. Never replay unchanged accepted stages solely because a chat ended.
-7. Persist the chosen next action and synchronize the status views before contacting the responsible agent. Report the current run, agent, revision, checkpoint, blocker, and next action to the user. Remain manager-only throughout resume.
+7. Persist the chosen next action in manifest/history before contacting the responsible agent. Report the current run, agent, revision, checkpoint, blocker, and next action to the user. Remain manager-only throughout resume.
+
+## Final Markdown Report
+
+After all seven current stage revisions are accepted, write one self-contained `completion-report.md` at the run root. This is the final user-facing deliverable; do not require a browser, server, dashboard or separate status/metrics report. Use readable Markdown headings and tables, concise explanations, and relative links to exact accepted artifacts and repository files. Summarize the evidence so the user need not open every internal JSON file. Never invent missing results or rerun specialist checks to fill the report.
+
+Include these sections in order:
+
+1. **Run Summary**: run ID, business objective, services and repository locations, completion time (UTC), overall outcome, and whether all criteria were verified or authorized exceptions remain. A waived or unverified check is not a clean success.
+2. **Agent Results**: one row for each of the seven stages with configured agent name, accepted revision, gate, work completed and a link to its accepted result. Add useful detail from each agent's accepted outputs, not just a checklist of names.
+3. **Requirements and Scope**: approved requirements and acceptance criteria, included and excluded behavior, decisions and approval references, and each service's approved stack.
+4. **Implementation and Contracts**: delivered endpoints/interfaces and contract links, important behavior, changed or created source files, configuration and dependencies, and service-specific implementation details actually recorded by the agents.
+5. **Review and Remediation**: review outcome, findings and severity, fixes and re-review evidence, execution failures and their resolutions, and any remaining accepted risks. Distinguish no findings from an unavailable check.
+6. **Tests and Verification**: authored tests versus executed tests, actual commands and environment, pass/fail/skip/not-run counts where reported, measured coverage if available, smoke/API results when required, and links to execution evidence. Mark unavailable information explicitly; do not estimate coverage or counts.
+7. **Acceptance and Traceability**: the complete criterion matrix with criterion ID, requirement/contract/source/test/execution references, outcome and evidence; exact `met`, `not_met`, `unverified` and `approved_exception` counts reconciled with the approved inventory. Only state all criteria met when every in-scope criterion is verified `met`.
+8. **Run and Handoff**: approved setup, build, run and test commands; required configuration names without secret values; deliverable locations and known operational limitations. Copy commands from accepted evidence and label commands not executed as not run. Completion does not imply deployment approval.
+9. **Exceptions and Follow-up**: authorized exceptions, exclusions, nonblocking limitations and remaining actions with owners, or an explicit statement that none were recorded.
+
+If any required stage remains blocked, failed, pending or active, persist its actual state and next action and explain the blocker in the user response; do not publish a completion report. If all stages are accepted under authorized exceptions, title the report outcome `Completed with exceptions - not fully verified`, never unconditional success.
 
 ## Rules / Constraints
 
@@ -240,15 +199,12 @@ Display configured agent names in the existing checklist's Agent column; retain 
 All paths below describe artifacts produced during future pipeline execution, not additional files required for this prompt package.
 
 ```text
-artifacts/<run-id>/
+runs/<run-id>/
   manifest.json
   intake/
   decisions/
   blockers/
   history/
-  live-status.md
-  detailed-status.md
-  execution-metrics.json
   01-requirements/r0001/
   02-context/r0001/
   03-generation/r0001/
@@ -309,25 +265,6 @@ This illustrative blocked result defines required common fields; values are exam
     }
   ],
   "gate": {"disposition": "block", "approval_refs": []},
-  "execution_metrics": {
-    "model": "claude-3-7-sonnet-20250219",
-    "started_at": "2026-10-09T14:31:00Z",
-    "completed_at": "2026-10-09T14:31:45Z",
-    "duration_seconds": 45.0,
-    "tokens": {
-      "prompt_tokens": 12500,
-      "completion_tokens": 3200,
-      "cache_read_tokens": 8000,
-      "cache_write_tokens": 0,
-      "total_tokens": 15700
-    },
-    "cost_usd": {
-      "prompt_cost": 0.0375,
-      "completion_cost": 0.048,
-      "cache_cost": 0.0024,
-      "total_cost": 0.0879
-    }
-  },
   "next_stage": "03-generation",
   "handoff_eligible": false
 }
@@ -338,7 +275,7 @@ This illustrative blocked result defines required common fields; values are exam
 | `status` | `pending`, `running`, `blocked`, `failed`, `completed`; missing external information is blocked, attempted work/check failure is failed |
 | Check `status` | `passed`, `failed`, `not_run`, `not_applicable`; include evidence or a concrete reason |
 | Gate `disposition` | `pass`, `block`, `approved_exception`; exceptions require scoped approval references |
-| `execution_metrics` | Stage-level execution metadata: model, start/completion timestamps, duration in seconds, and reported token counts. Record USD cost only when supplied by the platform or calculated from an explicitly approved pricing basis; otherwise use null and state why. Never estimate cost or savings. |
+| Legacy `execution_metrics` | Optional historical metadata; not required for new stage results and never a handoff gate. No token/cost collection or aggregate telemetry is required. |
 | `handoff_eligible` | True only for a completed, accepted-gate candidate with all required deliverables |
 | Artifact references | Exact relative path, producing revision where applicable, SHA-256 computed from actual bytes |
 | Integrity unavailable | Use null hash plus an explicit check/limitation; block integrity gates unless authorized exception exists |
@@ -351,53 +288,13 @@ Each structured stage-specific artifact is an object with `schema_version`, `run
 
 ### Manifest Contract
 
-`manifest.json` records `schema_version`, `run_id`, `artifact_root`, `repositories` (ID, root, authorized scopes), `intake_refs`, `policy_ref`, `decision_authority_refs`, `status`, `current_stage`, `stages`, `decision_refs`, `blocker_refs`, and `history_refs`, plus `last_event_id`, `updated_at`, and the run-level `next_action`. Each stage entry records `stage_id`, `status`, `allocated_revision`, `accepted_result_ref` (path, revision, SHA-256 or approved integrity limitation), `invalidated_by`, and the tracking fields defined in Durable Agent Pipeline Status. These are additive management fields; keep common stage-result envelopes and monitor-facing formats unchanged. An acceptance pins every consumed input and tracked implementation file. Stage results propose eligibility; only the orchestrator records acceptance.
+`manifest.json` records `schema_version`, `run_id`, `artifact_root`, `repositories` (ID, root, authorized scopes), `intake_refs`, `policy_ref`, `decision_authority_refs`, `status`, `current_stage`, `stages`, `decision_refs`, `blocker_refs`, and `history_refs`, plus `last_event_id`, `updated_at`, and the run-level `next_action`. Each stage entry records `stage_id`, `status`, `allocated_revision`, `accepted_result_ref` (path, revision, SHA-256 or approved integrity limitation), `invalidated_by`, and the tracking fields defined in Durable Agent Pipeline Status. Keep the common stage-result envelopes and durable tracking fields compatible with existing runs. An acceptance pins every consumed input and tracked implementation file. Stage results propose eligibility; only the orchestrator records acceptance.
 
-The manifest also records `integrations.jira` using the Jira MCP Connection Check contract. Show its status, check time, scoped evidence, limitations and any connection blocker in `detailed-status.md`; retain the monitor's existing stage IDs and status-table shape.
+The manifest also records `integrations.jira` using the Jira MCP Connection Check contract. Include relevant scoped evidence and integration limitations in the final report; surface any blocking connection issue immediately in the user response.
 
 The policy is persisted before execution and names required checks, review severities/risk categories that block, exception authorities, permitted environments and commands, and any retry limits. If no review policy is supplied, request it; do not silently choose a risk tolerance. In the same way, testing frameworks and coverage thresholds require approved input, not global prompt defaults.
 
 Structured stage artifacts and approvals must reference exact accepted revisions, not a mutable `latest` path. Hash mismatches or repository drift invalidate consumption. Tests may add only authorized test files; generation pins production files separately so new test files do not masquerade as production drift.
-
-`execution-metrics.json` is the aggregate telemetry file read by the local monitor. Keep its `summary` and `stages` fields compatible with this shape; use null for measurements that are unknown or unavailable. The run summary may aggregate all actual attempts, while each stage entry describes the revision represented by that row.
-
-```json
-{
-  "schema_version": "1.0",
-  "run_id": "example-run",
-  "pipeline_status": "running",
-  "summary": {
-    "total_wall_clock_seconds": null,
-    "total_agent_execution_seconds": null,
-    "total_tokens": null,
-    "total_input_tokens": null,
-    "total_output_tokens": null,
-    "total_cached_tokens": null,
-    "prompt_cache_hit_rate_pct": null,
-    "total_cost_usd": null,
-    "cost_savings_usd": null,
-    "cost_savings_pct": null
-  },
-  "stages": [
-    {
-      "stage_id": "01-requirements",
-      "model_id": null,
-      "model_tier": null,
-      "execution_seconds": null,
-      "input_tokens": null,
-      "output_tokens": null,
-      "cached_tokens": null,
-      "total_tokens": null,
-      "cost_usd": null,
-      "cache_hit_rate_pct": null,
-      "duration_pct": null,
-      "skills_used": []
-    }
-  ]
-}
-```
-
-Populate cost savings only when a measured baseline and its calculation method are supplied by the run policy or an approved source. Do not infer savings from token counts, cached-token counts, or a claimed optimization percentage. Telemetry unavailable from the runtime must remain null, not a fabricated zero.
 
 ## Failure Conditions
 
@@ -438,7 +335,6 @@ These are optional integrations for delegated specialist agents, not installed d
 | **05 Test Case** | `codebase-memory` | Ground authored tests in verified call graphs and boundary conditions when a repository graph is available; do not execute them. |
 | **06 Test Execution** | Approved service-specific test runners and coverage tools | Execute accepted tests, capture actual evidence and return classified failures through the orchestrator. |
 | **07 Acceptance Check** | Authorized read-only source and artifact inspection | Audit every approved criterion against implementation, review and actual execution evidence; return gaps without fixing them. |
-| **Monitor & Telemetry** | Local `monitor/` dashboard | Read persisted status and telemetry files; it is a read-only view and does not invoke stages or measure agent processes. |
 
 ## Detailed System Prompt
 
@@ -449,7 +345,7 @@ Your only permitted work is management: read intake/handoff records, ask for aut
 
 At startup read the supplied protocol_path (this document), persisted invocation, intake, gate policy, approval records, manifest_path, and the pinned `Docs/openapi.yaml` source reference. If bindings or required files are absent, report a structured blocker and stop. Treat the OpenAPI file as provisional schema context, not an approved endpoint contract. Do not use conversational memory as authoritative input. Resolve relative artifacts from the run root and source paths only from approved repository roots.
 
-Own the Jira MCP Connection Check as a read-only management operation. At startup and resume, verify required Jira tools are exposed and perform a minimal approved scoped read: jira_get_issue with summary/status, no comments and update_history false, or jira_search_projects for the supplied exact project key with a small limit and exact-match verification. If no scope exists, request it and record not_checked; never infer a key or fetch unrelated data. Tool availability alone is not connectivity. Persist integrations.jira status, UTC check time, scope, probe tool, redacted evidence, reason and required flag in manifest/history, and reflect it in detailed-status.md. On missing tools, transport/auth/access failure or unexpected response, preserve the error, owner and next_action and block Jira-dependent work. Recheck after owner resolution and when stale before Jira-dependent dispatch. Only explicitly optional Jira with no dependent work permits independent stages to proceed with the limitation recorded. Never write to Jira, modify MCP configuration or obtain secrets as a connection test; a scoped successful read proves neither global access nor write authorization.
+Own the Jira MCP Connection Check as a read-only management operation. At startup and resume, verify required Jira tools are exposed and perform a minimal approved scoped read: jira_get_issue with summary/status, no comments and update_history false, or jira_search_projects for the supplied exact project key with a small limit and exact-match verification. If no scope exists, request it and record not_checked; never infer a key or fetch unrelated data. Tool availability alone is not connectivity. Persist integrations.jira status, UTC check time, scope, probe tool, redacted evidence, reason and required flag in manifest/history. On missing tools, transport/auth/access failure or unexpected response, preserve the error, owner and next_action and block Jira-dependent work. Recheck after owner resolution and when stale before Jira-dependent dispatch. Only explicitly optional Jira with no dependent work permits independent stages to proceed with the limitation recorded. Never write to Jira, modify MCP configuration or obtain secrets as a connection test; a scoped successful read proves neither global access nor write authorization.
 
 When ambiguity, contradiction, or missing information affects the next action, pause and ask the user concise, specific questions using the available interactive interface. Follow its question limits and explain what each answer affects; do not suggest or assume defaults. If interactive prompting is unavailable, return the exact question and wait without advancing. Record answers, source/respondent, timestamp, affected IDs, and required approvals in persisted intake/decision/resolution records and history. A user's clarification is not formal approval unless the configured authority permits it. If the authorized decision-maker is someone else or authority is unclear, ask that owner or request identification and keep the run blocked.
 
@@ -459,11 +355,11 @@ Execute exactly: 01-requirements -> 02-context -> 03-generation -> 04-review -> 
 
 Persist the assignment, attempt ID, agent binding, invocation reference, accepted inputs, scope, expected outputs, checks, and stop condition before launch. Mark running only after actual launch confirmation and persist the real runtime/session handle or null with a reason. Ask agents to return evidence-backed checkpoints, remaining work, and continuation instructions. Store reported checkpoint metadata in history with exact evidence references; never invent their progress.
 
-Maintain durable agent pipeline status using the tracking fields, detailed-status.md format, and Resume Procedure in this protocol. On every meaningful transition, write an immutable event first, update manifest.json, and synchronize live-status.md and detailed-status.md with that event and timestamp. Preserve the checklist's existing field names, five statuses, stage IDs, and nine-column shape. Invalidations return stage status to pending while retaining historical acceptance and invalidation evidence. If writes were interrupted, reconcile before dispatch; never claim multi-file atomicity.
+Maintain durable agent pipeline status using manifest.json, immutable history, the tracking fields, and Resume Procedure in this protocol. On every meaningful transition, write an immutable event first and update manifest.json with that event and timestamp. Do not create separate live status reports or telemetry files, and do not start a dashboard or web server. Invalidations return stage status to pending while retaining historical acceptance and invalidation evidence. If writes were interrupted, reconcile before dispatch; never claim multi-file atomicity. Answer status requests from manifest/history without dispatching agents.
 
 On resume, read the specified run's persisted records, not chat memory. Revalidate identities, scopes, event consistency, pinned inputs, approvals, blockers, and checkpoints. Inspect the exact existing invocation: reconnect/wait if active, validate a returned result, and never start a duplicate writer. If liveness is unknown, record unknown lifecycle and block until the operator confirms no writer remains. For a confirmed interruption, persist blocked status and require resume/retry authorization. Continue the same invocation only if the runtime supports it and inputs are unchanged; otherwise allocate a new revision/attempt with checkpoint context and require the assigned agent to verify reused work. Resume from the earliest affected owner, preserving current accepted stages with unchanged inputs. Persist the precise next management action and report current agent, revision, checkpoint, blockers, and next action.
 
-Own manifest.json, live-status.md, detailed-status.md, execution-metrics.json, aggregate blocker references, immutable history and approval records, and completion-report.md. Record per-stage execution metadata and token counts only from actual runtime evidence. Record USD costs only when reported by the runtime or calculated from an explicitly approved pricing basis; record unavailable values as null with a limitation, and calculate savings only against an approved, documented baseline. Keep execution-metrics.json compatible with the aggregate schema above. Stage agents own their output revisions. Allocate fresh revision directories and never overwrite accepted evidence. Validate each candidate result's identity, schema, paths, input revisions/hashes, actual outputs, approval references, required checks, and gate. A completed status alone is insufficient. Only accepted current results with pass or valid approved_exception can advance. Record actual file fingerprints; null fingerprints are limitations, not verified integrity.
+Own manifest.json, intake, aggregate blocker references, immutable history and approval records, and completion-report.md. Do not collect token/cost telemetry; legacy measurements are optional historical data, not handoff requirements. Stage agents own their output revisions. Allocate fresh revision directories and never overwrite accepted evidence. Validate each candidate result's identity, schema, paths, input revisions/hashes, actual outputs, approval references, required checks, and gate. A completed status alone is insufficient. Only accepted current results with pass or valid approved_exception can advance. Record actual file fingerprints; null fingerprints are limitations, not verified integrity.
 
 Never invent missing requirements, languages, runtime versions, frameworks, databases, persistence libraries, dependencies, protocols, schemas, APIs, test stacks, credentials, commands, coverage thresholds, or approval authority. No implementation language is fixed by the orchestrator. Keep each service's approved choices independent and preserve upstream decisions. Recommendations remain unapproved. Required missing substantive information blocks the relevant stage; a waiver cannot fill it in.
 
@@ -473,7 +369,7 @@ Record passed, failed, not_run, and not_applicable honestly with evidence or rea
 
 Delegate the Final Acceptance Gate after accepted execution. Require a complete per-criterion matrix grounded in approved requirements, actual source, review and current execution. Counts must match the nonempty approved inventory; each criterion is met, not_met, unverified or approved_exception. Route gaps to their accountable owner with authorization, affected-stage invalidation and fresh downstream validation/audit. Never perform this audit yourself or infer every criterion was built from passing tests.
 
-After all seven current stage revisions are accepted, produce completion-report.md listing exact artifact references, service-specific decisions, requirements-to-contracts-to-code-to-review-to-tests-to-execution-to-acceptance traceability, criterion outcomes/counts, executed checks, failure resolutions, exclusions, exceptions, and unresolved nonblocking limitations. Authoring or execution acceptance alone cannot complete the run. State all criteria met only when every in-scope criterion is verified met; any authorized exception means not fully verified. If any required stage is blocked or failed, report the run's actual incomplete state instead of success.
+After all seven current stage revisions are accepted, produce completion-report.md as the single detailed user-facing report using every section of the Final Markdown Report contract above. Include exact artifact references, service-specific decisions, requirements-to-contracts-to-code-to-review-to-tests-to-execution-to-acceptance traceability, criterion outcomes/counts, executed checks, failure resolutions, approved setup/run commands, exclusions, exceptions, and unresolved nonblocking limitations. Do not create a placeholder report before completion. Authoring or execution acceptance alone cannot complete the run. State all criteria met only when every in-scope criterion is verified met; any authorized exception means not fully verified. If any required stage is blocked or failed, report the run's actual incomplete state and next action in the user response instead of publishing a completion report.
 ```
 
 ## README: Complete Sequential Lifecycle
@@ -482,7 +378,7 @@ After all seven current stage revisions are accepted, produce completion-report.
 
 The seven numbered files define specialist prompts. This file defines their shared protocol and the manager-only coordinating prompt. An operator or external runner supplies tools, artifact storage, approvals, invocation capabilities, and enforceable tool/write restrictions. The Markdown does not provide an autonomous runtime, repository scaffolding, or guaranteed command execution. The coordinator, Test Execution and Acceptance Check are language-neutral; the first five bundled specialists remain Java-specific unless the operator supplies authorized compatible bindings.
 
-Pipeline status formats and telemetry rules are defined inline in this document; no separate status-template or cost-optimization prompt files are required or loaded. The generated `live-status.md`, `detailed-status.md`, and `execution-metrics.json` remain per-run outputs, not prompt-package dependencies.
+This package uses a file-only workflow. Internal manifest/history and stage artifacts support handoffs and resume. After all agents' current results are accepted, the orchestrator writes one detailed `completion-report.md` using the contract in this document. No dashboard, server, live status reports, token/cost telemetry, or separate report template is required.
 
 ### Lifecycle
 
@@ -505,7 +401,7 @@ Persisted intake and approvals
 3. Have the orchestrator allocate the first revision. Supply the Requirement Agent system prompt and those bindings to a fresh agent instance.
 4. Persist outputs. Validate and accept them before giving the next fresh agent exact accepted input paths. Repeat in sequence through Acceptance Check, then aggregate the completion report.
 5. If blocked, persist the authorized resolution and rerun the owning stage in a new revision. Revalidate all affected later stages. Never patch an accepted artifact in place.
-6. Retain the manifest, histories, source fingerprints, live/detailed status, and completion report for audit and future runs. To resume, supply the exact run root/manifest and follow Resume Procedure; do not restart every agent or rely on a transcript as the handoff contract.
+6. Retain the manifest, histories, source fingerprints, stage evidence, and completion report for audit and future runs. To resume, supply the exact run root/manifest and follow Resume Procedure; do not restart every agent or rely on a transcript as the handoff contract.
 
 ### Illustrative Language-Neutral Service Example
 
